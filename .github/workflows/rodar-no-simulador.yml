@@ -1,0 +1,123 @@
+# Abre o aplicativo num iPhone simulado e fotografa a tela.
+#
+# POR QUE ISTO EXISTE
+# -------------------
+# O montar.yml respondeu "compila?". Isto aqui responde a pergunta seguinte:
+# "abre e mostra alguma coisa?". E a gente descobre sem ter Mac nem iPhone,
+# porque quem roda o simulador e a maquina do GitHub.
+#
+# O QUE ISTO NAO RESPONDE
+# -----------------------
+# Velocidade. O simulador usa o processador do Mac deles, que e muito mais
+# forte que o de um iPhone. Entao serve pra saber se o aplicativo FUNCIONA,
+# nunca pra saber se ele e rapido. Essa resposta so vem no aparelho de
+# verdade, pelo TestFlight.
+
+name: Rodar no simulador
+
+on:
+  workflow_dispatch:
+
+jobs:
+  simulador:
+    runs-on: macos-latest
+
+    steps:
+      - name: Pegar o codigo
+        uses: actions/checkout@v4
+
+      - name: Instalar o Rust e o alvo de simulador
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup target add aarch64-apple-ios-sim
+
+      - name: Descobrir o nome do projeto
+        id: achar
+        run: |
+          set -e
+          PROJETO=$(ls -d *.xcodeproj | head -1)
+          ESQUEMA=$(xcodebuild -list -project "$PROJETO" -json \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['project']['schemes'][0])")
+          echo "projeto=$PROJETO" >> $GITHUB_OUTPUT
+          echo "esquema=$ESQUEMA" >> $GITHUB_OUTPUT
+          echo "projeto: $PROJETO / esquema: $ESQUEMA"
+
+      # Compilacao pro SIMULADOR e diferente da do aparelho: outro processador
+      # de destino, e sem precisar de assinatura nenhuma.
+      - name: Compilar para o simulador
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project "${{ steps.achar.outputs.projeto }}" \
+            -scheme "${{ steps.achar.outputs.esquema }}" \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath construcao \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Ligar um iPhone simulado
+        id: telefone
+        run: |
+          set -e
+          echo "--- aparelhos disponiveis:"
+          xcrun simctl list devicetypes | grep -i iphone | tail -5
+          # Pega o iPhone mais novo que a maquina deles oferecer.
+          TIPO=$(xcrun simctl list devicetypes -j \
+            | python3 -c "
+import json,sys
+tipos=[t for t in json.load(sys.stdin)['devicetypes'] if 'iPhone' in t['name']]
+print(tipos[-1]['identifier'])")
+          echo "tipo escolhido: $TIPO"
+          RUNTIME=$(xcrun simctl list runtimes -j \
+            | python3 -c "
+import json,sys
+r=[x for x in json.load(sys.stdin)['runtimes'] if x['isAvailable'] and 'iOS' in x['name']]
+print(r[-1]['identifier'])")
+          echo "sistema: $RUNTIME"
+          ID=$(xcrun simctl create "teste-ruffle" "$TIPO" "$RUNTIME")
+          xcrun simctl boot "$ID"
+          xcrun simctl bootstatus "$ID" -b
+          echo "id=$ID" >> $GITHUB_OUTPUT
+
+      - name: Instalar e abrir o aplicativo
+        id: abrir
+        run: |
+          set -e
+          APLICATIVO=$(find construcao/Build/Products -maxdepth 3 -name '*.app' | head -1)
+          echo "aplicativo: $APLICATIVO"
+          NOME=$(defaults read "$PWD/$APLICATIVO/Info" CFBundleIdentifier)
+          echo "identificador: $NOME"
+          xcrun simctl install "${{ steps.telefone.outputs.id }}" "$APLICATIVO"
+          xcrun simctl launch "${{ steps.telefone.outputs.id }}" "$NOME"
+          echo "nome=$NOME" >> $GITHUB_OUTPUT
+
+      # Varias fotos ao longo do tempo, e nao uma: uma tela preta no segundo 2
+      # nao quer dizer nada, e uma tela preta no segundo 30 quer dizer muito.
+      - name: Fotografar a tela ao longo de 30 segundos
+        run: |
+          mkdir -p fotos
+          for i in 1 2 3 4 5 6; do
+            sleep 5
+            xcrun simctl io "${{ steps.telefone.outputs.id }}" screenshot "fotos/tela-$i.png" || true
+            echo "foto $i tirada"
+          done
+          ls -lh fotos
+
+      # Se o aplicativo tiver morrido, o motivo esta aqui.
+      - name: Guardar o que o aplicativo falou
+        if: always()
+        run: |
+          mkdir -p fotos
+          xcrun simctl spawn "${{ steps.telefone.outputs.id }}" log show \
+            --last 2m --predicate 'processImagePath contains "ruffle"' \
+            > fotos/registro-do-aplicativo.txt 2>&1 || true
+          tail -40 fotos/registro-do-aplicativo.txt || true
+
+      - name: Guardar as fotos pra baixar
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fotos-do-simulador
+          path: fotos/
