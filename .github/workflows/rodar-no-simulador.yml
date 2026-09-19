@@ -72,19 +72,29 @@ jobs:
             ONLY_ACTIVE_ARCH=YES \
             build
 
+      # USAR UM QUE JA EXISTE, em vez de criar.
+      #
+      # Na tentativa anterior eu criava um aparelho pegando o ULTIMO da lista,
+      # supondo que fosse o mais novo. Nao e: a lista nao esta em ordem de
+      # lancamento, e saiu um iPhone 6s Plus, que nao roda iOS 26 —
+      # "Incompatible device".
+      #
+      # A maquina do GitHub ja vem com iPhones simulados prontos e compativeis
+      # com o Xcode dela. Usar um desses acaba com a adivinhacao.
       - name: Ligar um iPhone simulado
         id: telefone
         run: |
           set -e
-          echo "--- aparelhos disponiveis:"
-          xcrun simctl list devicetypes | grep -i iphone | tail -5
-          # Pega o iPhone mais novo que a maquina deles oferecer.
-          TIPO=$(xcrun simctl list devicetypes -j | python3 -c "import json,sys; ts=[t for t in json.load(sys.stdin)['devicetypes'] if 'iPhone' in t['name']]; print(ts[-1]['identifier'])")
-          echo "tipo escolhido: $TIPO"
-          RUNTIME=$(xcrun simctl list runtimes -j | python3 -c "import json,sys; r=[x for x in json.load(sys.stdin)['runtimes'] if x['isAvailable'] and 'iOS' in x['name']]; print(r[-1]['identifier'])")
-          echo "sistema: $RUNTIME"
-          ID=$(xcrun simctl create "teste-ruffle" "$TIPO" "$RUNTIME")
-          xcrun simctl boot "$ID"
+          echo "--- aparelhos prontos nesta maquina:"
+          xcrun simctl list devices available | grep -i iphone || true
+          ID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for v in d.values() for x in v if 'iPhone' in x['name']]; print(c[-1]['udid'] if c else '')")
+          NOME=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for v in d.values() for x in v if 'iPhone' in x['name']]; print(c[-1]['name'] if c else '')")
+          if [ -z "$ID" ]; then
+            echo "Nenhum iPhone pronto. Nao da pra seguir."
+            exit 1
+          fi
+          echo "usando: $NOME ($ID)"
+          xcrun simctl boot "$ID" || true
           xcrun simctl bootstatus "$ID" -b
           echo "id=$ID" >> $GITHUB_OUTPUT
 
