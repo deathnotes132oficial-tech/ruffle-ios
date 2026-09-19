@@ -1,0 +1,91 @@
+# Monta o Ruffle para iPhone num Mac do GitHub.
+#
+# POR QUE ISTO EXISTE
+# -------------------
+# Aplicativo de iPhone so se compila em Mac, e nos nao temos um. O GitHub
+# empresta Macs de graca pra projetos publicos — entao a maquina e deles, o
+# trabalho e automatico, e o que volta pra gente e o aplicativo pronto.
+#
+# Serve pra responder UMA pergunta: o projeto do Ruffle para iPhone compila e
+# vira um aplicativo de verdade? Se compilar, existe caminho. Se nao compilar,
+# a gente descobriu sem gastar nada.
+#
+# O arquivo que sai NAO esta assinado, entao ainda nao instala sozinho num
+# aparelho. Isso e o passo seguinte, e so vale a pena se este aqui der certo.
+
+name: Montar o Ruffle para iPhone
+
+# So roda quando voce mandar, pelo botao. Nada acontece sozinho.
+on:
+  workflow_dispatch:
+
+jobs:
+  montar:
+    runs-on: macos-latest
+
+    steps:
+      - name: Pegar o codigo
+        uses: actions/checkout@v4
+
+      - name: Mostrar as ferramentas da maquina
+        run: |
+          echo "--- Xcode:"
+          xcodebuild -version
+          echo "--- Rust:"
+          rustc --version || echo "(sem rust ainda)"
+
+      - name: Instalar o Rust e o alvo de iPhone
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup target add aarch64-apple-ios
+
+      # O nome interno do projeto a gente nao sabe de cor. Em vez de chutar,
+      # perguntamos pro proprio Xcode e usamos o primeiro que ele listar.
+      - name: Descobrir o nome do projeto
+        id: achar
+        run: |
+          set -e
+          PROJETO=$(ls -d *.xcodeproj | head -1)
+          echo "projeto: $PROJETO"
+          xcodebuild -list -project "$PROJETO"
+          ESQUEMA=$(xcodebuild -list -project "$PROJETO" -json \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['project']['schemes'][0])")
+          echo "esquema: $ESQUEMA"
+          echo "projeto=$PROJETO" >> $GITHUB_OUTPUT
+          echo "esquema=$ESQUEMA" >> $GITHUB_OUTPUT
+
+      # Sem assinatura: assinar exige conta paga da Apple, e neste passo a
+      # gente so quer saber se o aplicativo se constroi.
+      - name: Compilar para iPhone
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project "${{ steps.achar.outputs.projeto }}" \
+            -scheme "${{ steps.achar.outputs.esquema }}" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath construcao \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      # Um .ipa e so uma pasta "Payload" com o aplicativo dentro, compactada.
+      - name: Empacotar o .ipa
+        run: |
+          set -e
+          APLICATIVO=$(find construcao/Build/Products -maxdepth 3 -name '*.app' | head -1)
+          echo "aplicativo encontrado: $APLICATIVO"
+          mkdir -p saida/Payload
+          cp -R "$APLICATIVO" saida/Payload/
+          cd saida
+          zip -qry ruffle-iphone-sem-assinatura.ipa Payload
+          ls -lh *.ipa
+
+      - name: Guardar o resultado pra baixar
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruffle-iphone
+          path: saida/*.ipa
+          if-no-files-found: error
