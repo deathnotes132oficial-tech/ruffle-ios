@@ -1,22 +1,30 @@
-# Abre o aplicativo num iPhone simulado e fotografa a tela.
+# Abre o aplicativo num iPhone simulado, manda ele abrir um Flash, e
+# fotografa a tela.
 #
 # POR QUE ISTO EXISTE
 # -------------------
-# O montar.yml respondeu "compila?". Isto aqui responde a pergunta seguinte:
-# "abre e mostra alguma coisa?". E a gente descobre sem ter Mac nem iPhone,
-# porque quem roda o simulador e a maquina do GitHub.
+# O montar.yml respondeu "compila?". A primeira versao disto respondeu
+# "abre?" — e a resposta foi sim: apareceu a tela do Ruffle, de pe por 30
+# segundos.
+#
+# Agora falta a pergunta seguinte: ele DESENHA FLASH, ou so tem a casca?
+# Entao a gente poe um arquivo .swf na maquina e manda o aplicativo abrir.
 #
 # O QUE ISTO NAO RESPONDE
 # -----------------------
-# Velocidade. O simulador usa o processador do Mac deles, que e muito mais
-# forte que o de um iPhone. Entao serve pra saber se o aplicativo FUNCIONA,
-# nunca pra saber se ele e rapido. Essa resposta so vem no aparelho de
-# verdade, pelo TestFlight.
+# Velocidade. O simulador usa o processador do Mac deles, muito mais forte
+# que o de um iPhone. Serve pra saber se FUNCIONA, nunca se e rapido. Essa
+# resposta so vem no aparelho de verdade, pelo TestFlight.
 
 name: Rodar no simulador
 
 on:
   workflow_dispatch:
+    inputs:
+      swf:
+        description: "Endereco de um .swf pra testar (em branco = o padrao)"
+        required: false
+        default: ""
 
 jobs:
   simulador:
@@ -28,11 +36,10 @@ jobs:
 
       # SEM mandar trocar de versao do Rust.
       #
-      # O projeto tem um rust-toolchain.toml que fixa a versao que ele quer
-      # (nightly). Na primeira tentativa eu mandei usar a estavel, e o alvo do
-      # simulador foi instalado na versao errada — a compilacao usou uma e o
-      # alvo estava na outra. Rodando DENTRO da pasta do projeto, o rustup
-      # respeita o arquivo dele sozinho.
+      # O projeto tem um rust-toolchain.toml que fixa a versao que ele quer.
+      # Numa tentativa anterior eu mandei usar a estavel, e o alvo do simulador
+      # foi instalado na versao errada. Rodando DENTRO da pasta do projeto, o
+      # rustup respeita o arquivo dele sozinho.
       - name: Instalar o alvo de simulador
         run: |
           rustup show
@@ -50,14 +57,9 @@ jobs:
           echo "esquema=$ESQUEMA" >> $GITHUB_OUTPUT
           echo "projeto: $PROJETO / esquema: $ESQUEMA"
 
-      # Compilacao pro SIMULADOR e diferente da do aparelho: outro processador
-      # de destino, e sem precisar de assinatura nenhuma.
-      #
       # ARCHS=arm64 existe porque por padrao ele tenta montar um aplicativo que
       # sirva em simulador Intel E Apple ao mesmo tempo. O pedaco Intel nem
-      # existe no Rust com esse nome (foi o erro da primeira tentativa), e a
-      # maquina do GitHub e Apple — entao seria trabalho pra produzir algo que
-      # ninguem usaria.
+      # existe no Rust com esse nome, e a maquina do GitHub e Apple.
       - name: Compilar para o simulador
         run: |
           set -o pipefail
@@ -72,15 +74,11 @@ jobs:
             ONLY_ACTIVE_ARCH=YES \
             build
 
-      # USAR UM QUE JA EXISTE, em vez de criar.
+      # USAR UM IPHONE QUE JA EXISTE, em vez de criar.
       #
-      # Na tentativa anterior eu criava um aparelho pegando o ULTIMO da lista,
-      # supondo que fosse o mais novo. Nao e: a lista nao esta em ordem de
-      # lancamento, e saiu um iPhone 6s Plus, que nao roda iOS 26 —
-      # "Incompatible device".
-      #
-      # A maquina do GitHub ja vem com iPhones simulados prontos e compativeis
-      # com o Xcode dela. Usar um desses acaba com a adivinhacao.
+      # Criar escolhendo "o ultimo da lista" saiu um iPhone 6s Plus, que nao
+      # roda iOS 26 — "Incompatible device". Os que ja vem na maquina sao
+      # compativeis com o Xcode dela.
       - name: Ligar um iPhone simulado
         id: telefone
         run: |
@@ -108,29 +106,70 @@ jobs:
           echo "identificador: $NOME"
           xcrun simctl install "${{ steps.telefone.outputs.id }}" "$APLICATIVO"
           xcrun simctl launch "${{ steps.telefone.outputs.id }}" "$NOME"
+          sleep 5
+          mkdir -p fotos
+          xcrun simctl io "${{ steps.telefone.outputs.id }}" screenshot "fotos/1-abriu.png" || true
           echo "nome=$NOME" >> $GITHUB_OUTPUT
 
-      # Varias fotos ao longo do tempo, e nao uma: uma tela preta no segundo 2
-      # nao quer dizer nada, e uma tela preta no segundo 30 quer dizer muito.
-      - name: Fotografar a tela ao longo de 30 segundos
+      - name: Buscar um Flash pra testar
+        id: arquivo
         run: |
-          mkdir -p fotos
-          for i in 1 2 3 4 5 6; do
-            sleep 5
-            xcrun simctl io "${{ steps.telefone.outputs.id }}" screenshot "fotos/tela-$i.png" || true
-            echo "foto $i tirada"
+          set -e
+          ENDERECO="${{ inputs.swf }}"
+          if [ -z "$ENDERECO" ]; then
+            # Um dos arquivos de teste do proprio Ruffle: pequeno e estavel.
+            ENDERECO="https://raw.githubusercontent.com/ruffle-rs/ruffle/master/tests/tests/swfs/avm2/hello_world/test.swf"
+          fi
+          echo "baixando: $ENDERECO"
+          curl -fsSL "$ENDERECO" -o teste.swf
+          ls -lh teste.swf
+          file teste.swf
+          echo "caminho=$PWD/teste.swf" >> $GITHUB_OUTPUT
+
+      # DUAS TENTATIVAS, porque nao se sabe de antemao como este aplicativo
+      # aceita arquivo: pelo endereco do sistema, ou pela pasta dele.
+      # Sem "set -e" de proposito: se a primeira falhar, a segunda ainda roda.
+      - name: Mandar o aplicativo abrir o Flash
+        run: |
+          set +e
+          ID="${{ steps.telefone.outputs.id }}"
+          CAMINHO="${{ steps.arquivo.outputs.caminho }}"
+
+          echo "--- tentativa 1: entregar pelo sistema"
+          xcrun simctl openurl "$ID" "file://$CAMINHO"
+          echo "resultado: $?"
+          sleep 8
+          xcrun simctl io "$ID" screenshot "fotos/2-depois-de-entregar.png"
+
+          echo "--- tentativa 2: copiar pra dentro da pasta do aplicativo"
+          PASTA=$(xcrun simctl get_app_container "$ID" "${{ steps.abrir.outputs.nome }}" data)
+          echo "pasta do aplicativo: $PASTA"
+          mkdir -p "$PASTA/Documents"
+          cp "$CAMINHO" "$PASTA/Documents/teste.swf"
+          ls -l "$PASTA/Documents"
+          xcrun simctl terminate "$ID" "${{ steps.abrir.outputs.nome }}"
+          xcrun simctl launch "$ID" "${{ steps.abrir.outputs.nome }}"
+          sleep 8
+          xcrun simctl io "$ID" screenshot "fotos/3-depois-de-copiar.png"
+          exit 0
+
+      - name: Fotografar mais um pouco
+        run: |
+          for i in 4 5 6; do
+            sleep 6
+            xcrun simctl io "${{ steps.telefone.outputs.id }}" screenshot "fotos/$i-tela.png" || true
           done
           ls -lh fotos
 
-      # Se o aplicativo tiver morrido, o motivo esta aqui.
+      # Se o aplicativo tiver morrido ou reclamado, o motivo esta aqui.
       - name: Guardar o que o aplicativo falou
         if: always()
         run: |
           mkdir -p fotos
           xcrun simctl spawn "${{ steps.telefone.outputs.id }}" log show \
-            --last 2m --predicate 'processImagePath contains "ruffle"' \
+            --last 3m --predicate 'processImagePath contains "ruffle"' \
             > fotos/registro-do-aplicativo.txt 2>&1 || true
-          tail -40 fotos/registro-do-aplicativo.txt || true
+          tail -60 fotos/registro-do-aplicativo.txt || true
 
       - name: Guardar as fotos pra baixar
         if: always()
