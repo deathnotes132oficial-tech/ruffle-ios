@@ -126,38 +126,28 @@ jobs:
           file teste.swf
           echo "caminho=$PWD/teste.swf" >> $GITHUB_OUTPUT
 
-      # DUAS TENTATIVAS, porque nao se sabe de antemao como este aplicativo
-      # aceita arquivo: pelo endereco do sistema, ou pela pasta dele.
-      # Sem "set -e" de proposito: se a primeira falhar, a segunda ainda roda.
+      # UMA tentativa so, e depois OLHAR POR DOIS MINUTOS.
+      #
+      # Antes eu fazia duas entregas e reiniciava o aplicativo no meio. As
+      # duas funcionaram, entao a duvida acabou — e reiniciar agora seria um
+      # tiro no pe: o DDTank leva mais de um minuto carregando, e reiniciar
+      # mataria o carregamento na metade.
       - name: Mandar o aplicativo abrir o Flash
         run: |
           set +e
           ID="${{ steps.telefone.outputs.id }}"
-          CAMINHO="${{ steps.arquivo.outputs.caminho }}"
-
-          echo "--- tentativa 1: entregar pelo sistema"
-          xcrun simctl openurl "$ID" "file://$CAMINHO"
-          echo "resultado: $?"
-          sleep 8
-          xcrun simctl io "$ID" screenshot "fotos/2-depois-de-entregar.png"
-
-          echo "--- tentativa 2: copiar pra dentro da pasta do aplicativo"
-          PASTA=$(xcrun simctl get_app_container "$ID" "${{ steps.abrir.outputs.nome }}" data)
-          echo "pasta do aplicativo: $PASTA"
-          mkdir -p "$PASTA/Documents"
-          cp "$CAMINHO" "$PASTA/Documents/teste.swf"
-          ls -l "$PASTA/Documents"
-          xcrun simctl terminate "$ID" "${{ steps.abrir.outputs.nome }}"
-          xcrun simctl launch "$ID" "${{ steps.abrir.outputs.nome }}"
-          sleep 8
-          xcrun simctl io "$ID" screenshot "fotos/3-depois-de-copiar.png"
+          xcrun simctl openurl "$ID" "file://${{ steps.arquivo.outputs.caminho }}"
+          echo "resultado da entrega: $?"
           exit 0
 
-      - name: Fotografar mais um pouco
+      # Uma foto a cada 10 segundos, por dois minutos. O jogo demora, e uma
+      # tela preta no segundo 10 nao quer dizer nada.
+      - name: Acompanhar por dois minutos
         run: |
-          for i in 4 5 6; do
-            sleep 6
-            xcrun simctl io "${{ steps.telefone.outputs.id }}" screenshot "fotos/$i-tela.png" || true
+          for i in $(seq -w 1 12); do
+            sleep 10
+            xcrun simctl io "${{ steps.telefone.outputs.id }}" screenshot "fotos/tela-$i.png" || true
+            echo "foto $i (segundo $((10#$i * 10)))"
           done
           ls -lh fotos
 
