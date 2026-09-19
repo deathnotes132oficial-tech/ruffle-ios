@@ -26,11 +26,18 @@ jobs:
       - name: Pegar o codigo
         uses: actions/checkout@v4
 
-      - name: Instalar o Rust e o alvo de simulador
+      # SEM mandar trocar de versao do Rust.
+      #
+      # O projeto tem um rust-toolchain.toml que fixa a versao que ele quer
+      # (nightly). Na primeira tentativa eu mandei usar a estavel, e o alvo do
+      # simulador foi instalado na versao errada — a compilacao usou uma e o
+      # alvo estava na outra. Rodando DENTRO da pasta do projeto, o rustup
+      # respeita o arquivo dele sozinho.
+      - name: Instalar o alvo de simulador
         run: |
-          rustup update stable
-          rustup default stable
+          rustup show
           rustup target add aarch64-apple-ios-sim
+          rustup target list --installed
 
       - name: Descobrir o nome do projeto
         id: achar
@@ -45,6 +52,12 @@ jobs:
 
       # Compilacao pro SIMULADOR e diferente da do aparelho: outro processador
       # de destino, e sem precisar de assinatura nenhuma.
+      #
+      # ARCHS=arm64 existe porque por padrao ele tenta montar um aplicativo que
+      # sirva em simulador Intel E Apple ao mesmo tempo. O pedaco Intel nem
+      # existe no Rust com esse nome (foi o erro da primeira tentativa), e a
+      # maquina do GitHub e Apple — entao seria trabalho pra produzir algo que
+      # ninguem usaria.
       - name: Compilar para o simulador
         run: |
           set -o pipefail
@@ -55,6 +68,8 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath construcao \
             CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
             build
 
       - name: Ligar um iPhone simulado
