@@ -64,17 +64,9 @@ jobs:
           echo "--- aparelhos disponiveis:"
           xcrun simctl list devicetypes | grep -i iphone | tail -5
           # Pega o iPhone mais novo que a maquina deles oferecer.
-          TIPO=$(xcrun simctl list devicetypes -j \
-            | python3 -c "
-import json,sys
-tipos=[t for t in json.load(sys.stdin)['devicetypes'] if 'iPhone' in t['name']]
-print(tipos[-1]['identifier'])")
+          TIPO=$(xcrun simctl list devicetypes -j | python3 -c "import json,sys; ts=[t for t in json.load(sys.stdin)['devicetypes'] if 'iPhone' in t['name']]; print(ts[-1]['identifier'])")
           echo "tipo escolhido: $TIPO"
-          RUNTIME=$(xcrun simctl list runtimes -j \
-            | python3 -c "
-import json,sys
-r=[x for x in json.load(sys.stdin)['runtimes'] if x['isAvailable'] and 'iOS' in x['name']]
-print(r[-1]['identifier'])")
+          RUNTIME=$(xcrun simctl list runtimes -j | python3 -c "import json,sys; r=[x for x in json.load(sys.stdin)['runtimes'] if x['isAvailable'] and 'iOS' in x['name']]; print(r[-1]['identifier'])")
           echo "sistema: $RUNTIME"
           ID=$(xcrun simctl create "teste-ruffle" "$TIPO" "$RUNTIME")
           xcrun simctl boot "$ID"
