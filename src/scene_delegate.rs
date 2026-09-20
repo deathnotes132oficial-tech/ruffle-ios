@@ -2,7 +2,7 @@ use std::cell::Cell;
 
 use objc2::rc::{Allocated, Retained};
 use objc2::{define_class, msg_send, DefinedClass as _, MainThreadOnly, Message};
-use objc2_foundation::{NSObjectProtocol, NSSet, NSURL};
+use objc2_foundation::{NSObjectProtocol, NSProcessInfo, NSSet, NSURL};
 use objc2_ui_kit::{
     UINavigationController, UIOpenURLContext, UIResponder, UIScene, UISceneConnectionOptions,
     UISceneDelegate, UISceneSession, UIWindow, UIWindowScene, UIWindowSceneDelegate,
@@ -15,6 +15,9 @@ use crate::{storage, PlayerController};
 
 pub struct Ivars {
     window: Cell<Option<Retained<UIWindow>>>,
+    /// Pra so abrir o jogo de teste uma vez, e nao a cada vez que o
+    /// aplicativo volta pra frente.
+    ja_abriu_de_teste: Cell<bool>,
 }
 
 define_class!(
@@ -30,6 +33,7 @@ define_class!(
             tracing::info!("init scene");
             let this = this.set_ivars(Ivars {
                 window: Cell::new(None),
+                ja_abriu_de_teste: Cell::new(false),
             });
             unsafe { msg_send![super(this), init] }
         }
@@ -57,6 +61,22 @@ define_class!(
         #[unsafe(method(sceneDidBecomeActive:))]
         fn sceneDidBecomeActive(&self, scene: &UIScene) {
             tracing::info!("sceneDidBecomeActive:");
+
+            // ENTRADA DE TESTE: --jogo <endereco>
+            //
+            // Existe porque o iPhone pergunta "abrir no Ruffle?" quando o
+            // endereco vem de fora, e maquina nenhuma responde essa pergunta.
+            // Passando o endereco na abertura do aplicativo, nao ha pergunta.
+            //
+            // Pro jogador isso nunca aparece: ele toca no link do site,
+            // responde a pergunta uma vez, e pronto.
+            if !self.ivars().ja_abriu_de_teste.get() {
+                self.ivars().ja_abriu_de_teste.set(true);
+                if let Some(endereco) = endereco_de_teste() {
+                    tracing::info!("abrindo por argumento: {endereco}");
+                    tocar_endereco(scene, &endereco);
+                }
+            }
 
             // Restart playing.
             let nav = get_navigation_controller(scene);
@@ -188,7 +208,25 @@ fn get_navigation_controller(scene: &UIScene) -> Retained<UINavigationController
 /// (biblioteca de arquivos) segue normalmente.
 fn tocar_da_internet(scene: &UIScene, nsurl: &NSURL) -> Option<()> {
     let texto = nsurl.absoluteString()?.to_string();
-    let endereco = Url::parse(&texto).ok()?;
+    tocar_endereco(scene, &texto)
+}
+
+/// Le o endereco passado na abertura do aplicativo, quando houver.
+fn endereco_de_teste() -> Option<String> {
+    let argumentos = NSProcessInfo::processInfo().arguments();
+    let mut anterior = String::new();
+    for argumento in argumentos.iter() {
+        let atual = argumento.to_string();
+        if anterior == "--jogo" {
+            return Some(atual);
+        }
+        anterior = atual;
+    }
+    None
+}
+
+fn tocar_endereco(scene: &UIScene, texto: &str) -> Option<()> {
+    let endereco = Url::parse(texto).ok()?;
 
     let alvo = match endereco.scheme() {
         "deathnote" => {
