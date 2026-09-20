@@ -151,6 +151,30 @@ jobs:
           done
           ls -lh fotos
 
+      # RELATORIO DE FALHA.
+      #
+      # Quando o aplicativo fecha sozinho, o registro comum nao diz nada — ele
+      # simplesmente para. O motivo fica num relatorio que o sistema escreve a
+      # parte, com a linha exata onde quebrou. Sem isso a gente fica olhando
+      # pra tela de inicio do iPhone sem saber por que chegou ali.
+      - name: Procurar relatorio de falha
+        if: always()
+        run: |
+          mkdir -p fotos
+          echo "--- relatorios encontrados:"
+          ls -la ~/Library/Logs/DiagnosticReports/ 2>/dev/null || echo "(nenhum)"
+          for arquivo in ~/Library/Logs/DiagnosticReports/*uffle*; do
+            [ -e "$arquivo" ] || continue
+            echo "copiando $arquivo"
+            cp "$arquivo" fotos/ || true
+          done
+          # O trecho que interessa costuma ser o comeco: motivo e pilha.
+          for arquivo in fotos/*uffle*; do
+            [ -e "$arquivo" ] || continue
+            echo "================ $arquivo"
+            head -60 "$arquivo"
+          done
+
       # Se o aplicativo tiver morrido ou reclamado, o motivo esta aqui.
       - name: Guardar o que o aplicativo falou
         if: always()
