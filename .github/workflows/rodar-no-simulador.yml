@@ -79,6 +79,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
+            INFOPLIST_KEY_UISupportedInterfaceOrientations="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
             build
 
       # USAR UM IPHONE QUE JA EXISTE, em vez de criar.
