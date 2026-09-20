@@ -127,6 +127,20 @@ jobs:
           if [ -z "$ENDERECO" ]; then
             ENDERECO="https://raw.githubusercontent.com/ruffle-rs/ruffle/master/tests/tests/swfs/avm2/hello_world/test.swf"
           fi
+          # ENDERECO http PERTENCE AO NAVEGADOR.
+          #
+          # O iPhone entrega qualquer "http://" pro Safari, sempre — nao ha
+          # como um aplicativo tomar isso pra si. Foi o que aconteceu na
+          # tentativa anterior: abriu o Safari perguntando se queria baixar o
+          # Loading.swf.
+          #
+          # Por isso existe o esquema proprio: embrulhamos o endereco do jogo
+          # dentro de um "deathnote://", que so o nosso aplicativo atende. E o
+          # mesmo embrulho que um botao no site vai usar.
+          if [ "${ENDERECO#deathnote://}" = "$ENDERECO" ]; then
+            CODIFICADO=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$ENDERECO")
+            ENDERECO="deathnote://jogar?u=$CODIFICADO"
+          fi
           echo "entregando: $ENDERECO"
           xcrun simctl openurl "$ID" "$ENDERECO"
           echo "resultado da entrega: $?"
