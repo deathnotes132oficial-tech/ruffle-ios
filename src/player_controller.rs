@@ -248,6 +248,7 @@ impl PlayerController {
             // run_swf.rs doesn't need security scoping.
             _scoped_resource: Cell::new(None),
             player: OnceCell::new(),
+            controles: RefCell::new(Vec::new()),
         });
         let nil = None::<&AnyObject>;
         unsafe { msg_send![super(this), initWithNibName: nil, bundle: nil] }
