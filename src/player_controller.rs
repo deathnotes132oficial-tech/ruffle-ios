@@ -401,6 +401,7 @@ impl PlayerController {
         if let Some(nav) = self.navigationController() {
             unsafe { nav.setNavigationBarHidden_animated(true, _animated) };
         }
+        self.posicionar_controles();
 
         tracing::info!("player viewIsAppearing:");
 
@@ -483,7 +484,14 @@ impl PlayerController {
             view.addSubview(&botao);
             guardados.push(botao);
         }
-        tracing::info!("controles criados: {}", guardados.len());
+        // eprintln, e nao tracing: em Release as mensagens informativas do
+        // tracing nao saem, e a gente fica sem saber se isto rodou.
+        eprintln!("CONTROLES criados: {}", guardados.len());
+        drop(guardados);
+        // Posiciona ja: se a gente esperar so pelo momento em que a tela se
+        // arruma, e ele nao vier, os botoes ficam com tamanho zero — existem,
+        // mas ninguem ve.
+        self.posicionar_controles();
     }
 
     /// Recoloca os botoes conforme o tamanho atual da tela.
@@ -499,6 +507,11 @@ impl PlayerController {
         let limites = self.view().bounds();
         let largura = limites.size.width;
         let altura = limites.size.height;
+        eprintln!("CONTROLES posicionando em {largura} x {altura}");
+        if largura < 2.0 || altura < 2.0 {
+            // A tela ainda nao tem tamanho de verdade; volta quando tiver.
+            return;
+        }
 
         let lado = altura * 0.13;
         let folga = lado * 0.15;
