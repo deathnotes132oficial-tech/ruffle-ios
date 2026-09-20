@@ -15,8 +15,8 @@ use objc2_foundation::{
     MainThreadMarker, NSBundle, NSCoder, NSObjectProtocol, NSRunLoop, NSString,
 };
 use objc2_ui_kit::{
-    UIButton, UIButtonType, UIColor, UIControlEvents, UIControlState, UINavigationController,
-    UIViewController,
+    UIButton, UIButtonType, UIColor, UIControlEvents, UIControlState,
+    UIInterfaceOrientationMask, UINavigationController, UIViewController,
 };
 use ruffle_core::backend::navigator::OwnedFuture;
 use ruffle_core::backend::storage::StorageBackend;
@@ -203,6 +203,24 @@ define_class!(
         #[unsafe(method(controleSolto:))]
         fn controleSolto(&self, botao: &UIButton) {
             self.mandar_tecla(botao.tag(), false);
+        }
+
+        // JOGO E DEITADO.
+        //
+        // O DDTank tem 1000 por 600: em pe ele ocupa uma faixa fina no meio e
+        // os botoes nao cabem. Aqui a gente pede ao sistema pra so aceitar
+        // deitado enquanto o jogo esta aberto.
+        //
+        // Isto sozinho pode nao bastar: o Info.plist tem a palavra final sobre
+        // o que o aplicativo inteiro aceita. Os dois precisam concordar.
+        #[unsafe(method(supportedInterfaceOrientations))]
+        fn supportedInterfaceOrientations(&self) -> UIInterfaceOrientationMask {
+            UIInterfaceOrientationMask::Landscape
+        }
+
+        #[unsafe(method(shouldAutorotate))]
+        fn shouldAutorotate(&self) -> bool {
+            true
         }
     }
 
