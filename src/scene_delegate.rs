@@ -7,7 +7,7 @@ use objc2_ui_kit::{
     UINavigationController, UIOpenURLContext, UIResponder, UIScene, UISceneConnectionOptions,
     UISceneDelegate, UISceneSession, UIWindow, UIWindowScene, UIWindowSceneDelegate,
 };
-use ruffle_frontend_utils::content::PlayingContent;
+use ruffle_frontend_utils::content::{ContentDescriptor, PlayingContent};
 use ruffle_frontend_utils::player_options::PlayerOptions;
 use url::Url;
 
@@ -216,12 +216,21 @@ fn tocar_da_internet(scene: &UIScene, nsurl: &NSURL) -> Option<()> {
     let nav = get_navigation_controller(scene);
     nav.popToRootViewControllerAnimated(false);
 
+    // O campo la dentro se chama "parameters"; a variavel daqui esta em
+    // portugues. Escrever so "parameters," procuraria uma variavel com esse
+    // nome — foi o primeiro erro de compilacao.
     let opcoes = PlayerOptions {
-        parameters,
+        parameters: parametros,
         ..Default::default()
     };
-    let controller =
-        PlayerController::new(scene.mtm(), PlayingContent::DirectFile(alvo), opcoes);
+    // DirectFile nao aceita um endereco cru: ele quer um ContentDescriptor,
+    // que e o endereco mais o que o Ruffle precisa saber sobre ele. Pra coisa
+    // que mora na internet, a propria biblioteca oferece o new_remote.
+    let controller = PlayerController::new(
+        scene.mtm(),
+        PlayingContent::DirectFile(ContentDescriptor::new_remote(alvo)),
+        opcoes,
+    );
     nav.pushViewController_animated(&controller, true);
 
     Some(())
