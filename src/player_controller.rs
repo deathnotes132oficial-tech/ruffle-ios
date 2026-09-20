@@ -12,16 +12,18 @@ use objc2::runtime::AnyObject;
 use objc2::{define_class, msg_send, sel, DefinedClass as _, MainThreadOnly, Message};
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_foundation::{
-    MainThreadMarker, NSBundle, NSCoder, NSObjectProtocol, NSRunLoop, NSString,
+    MainThreadMarker, NSBundle, NSCoder, NSObjectProtocol, NSRunLoop, NSString, NSUserDefaults,
 };
 use objc2_ui_kit::{
     UIButton, UIButtonType, UIColor, UIControlEvents, UIControlState,
-    UIInterfaceOrientationMask, UINavigationController, UIViewController,
+    UIGestureRecognizerState, UIInterfaceOrientationMask, UILabel,
+    UILongPressGestureRecognizer, UINavigationController, UIPanGestureRecognizer,
+    UITapGestureRecognizer, UIView, UIViewController,
 };
 use ruffle_core::backend::navigator::OwnedFuture;
 use ruffle_core::backend::storage::StorageBackend;
 use ruffle_core::config::Letterbox;
-use ruffle_core::events::{KeyDescriptor, KeyLocation, LogicalKey, PhysicalKey};
+use ruffle_core::events::{KeyDescriptor, KeyLocation, LogicalKey, MouseButton, PhysicalKey};
 use ruffle_core::{LoadBehavior, Player, PlayerBuilder, PlayerEvent};
 use ruffle_frontend_utils::backends::audio::CpalAudioBackend;
 use ruffle_frontend_utils::backends::navigator::{
@@ -34,6 +36,15 @@ use url::Url;
 
 use crate::player_view::PlayerView;
 use crate::storage::{self, Movie, SecurityScopedResource};
+
+/// Quantos botoes personalizaveis existem, igual ao APK.
+const LIVRES: usize = 7;
+/// Onde comecam os personalizaveis na lista de botoes.
+const LIVRE_0: isize = 12;
+/// O olho, que esconde tudo menos ele.
+const OLHO: isize = 19;
+/// O botao que troca as duas fileiras de cima pelas teclas personalizaveis.
+const PALETA: isize = 20;
 
 #[derive(Clone, Debug)]
 pub struct FutureSpawner {
@@ -97,6 +108,24 @@ pub struct Ivars {
     /// Os botoes de toque, guardados pra poder recoloca-los quando a tela
     /// muda de tamanho (girar o aparelho, por exemplo).
     controles: RefCell<Vec<Retained<UIButton>>>,
+
+    /// Com a paleta aberta, as duas fileiras de cima viram as teclas
+    /// personalizaveis. E o botao de trocar, igual ao do APK.
+    paleta_aberta: Cell<bool>,
+
+    /// O olho: esconde tudo menos ele proprio.
+    escondidos: Cell<bool>,
+
+    /// Qual tecla cada botao personalizavel manda hoje.
+    /// None = vazio (mostra "+"), Some(i) = posicao na lista de opcoes.
+    livres: RefCell<Vec<Option<usize>>>,
+
+    /// A area onde o dedo desliza pra mover o ponteiro, como um touchpad.
+    area_mouse: RefCell<Option<Retained<UIView>>>,
+    /// A setinha desenhada por cima do jogo.
+    seta: RefCell<Option<Retained<UILabel>>>,
+    /// Onde o ponteiro esta agora, em coordenadas da tela.
+    onde_mouse: Cell<CGPoint>,
 }
 
 impl fmt::Debug for Ivars {
@@ -197,12 +226,72 @@ define_class!(
     impl PlayerController {
         #[unsafe(method(controleApertado:))]
         fn controleApertado(&self, botao: &UIButton) {
-            self.mandar_tecla(botao.tag(), true);
+            let indice = botao.tag();
+            match indice {
+                OLHO => self.alternar_olho(),
+                PALETA => self.alternar_paleta(),
+                _ => self.mandar_tecla(indice, true),
+            }
+        }
+
+        /// Deslizar o dedo na area move o ponteiro, como num touchpad.
+        ///
+        /// E movimento RELATIVO, e nao absoluto: o dedo empurra a setinha a
+        /// partir de onde ela esta. Assim da pra mirar com precisao numa area
+        /// pequena, que e todo o motivo de o ponteiro existir.
+        #[unsafe(method(moverMouse:))]
+        fn moverMouse(&self, gesto: &UIPanGestureRecognizer) {
+            let view = self.view();
+            let passo = unsafe { gesto.translationInView(Some(&view)) };
+            unsafe { gesto.setTranslation_inView(CGPoint::ZERO, Some(&view)) };
+
+            let atual = self.ivars().onde_mouse.get();
+            let limites = view.bounds();
+            let x = (atual.x + passo.x).clamp(0.0, limites.size.width);
+            let y = (atual.y + passo.y).clamp(0.0, limites.size.height);
+            self.ivars().onde_mouse.set(CGPoint::new(x, y));
+            self.desenhar_seta();
+            self.mandar_mouse(0);
+        }
+
+        /// Tocar na area clica onde a setinha esta.
+        #[unsafe(method(clicarMouse:))]
+        fn clicarMouse(&self, _gesto: &UITapGestureRecognizer) {
+            self.mandar_mouse(1);
+            self.mandar_mouse(2);
+        }
+
+        /// Segurar na area aperta e so solta quando o dedo sai.
+        #[unsafe(method(segurarMouse:))]
+        fn segurarMouse(&self, gesto: &UILongPressGestureRecognizer) {
+            match gesto.state() {
+                UIGestureRecognizerState::Began => self.mandar_mouse(1),
+                UIGestureRecognizerState::Ended | UIGestureRecognizerState::Cancelled => {
+                    self.mandar_mouse(2)
+                }
+                _ => {}
+            }
+        }
+
+        /// Segurar um botao personalizavel troca a tecla dele.
+        #[unsafe(method(trocarTecla:))]
+        fn trocarTecla(&self, gesto: &UILongPressGestureRecognizer) {
+            if gesto.state() != UIGestureRecognizerState::Began {
+                return;
+            }
+            let Some(view) = gesto.view() else { return };
+            let Some(botao) = view.downcast_ref::<UIButton>() else {
+                return;
+            };
+            self.proxima_tecla_livre(botao.tag());
         }
 
         #[unsafe(method(controleSolto:))]
         fn controleSolto(&self, botao: &UIButton) {
-            self.mandar_tecla(botao.tag(), false);
+            let indice = botao.tag();
+            if indice != OLHO && indice != PALETA {
+                self.mandar_tecla(indice, false);
+            }
         }
 
         // JOGO E DEITADO.
@@ -267,6 +356,12 @@ impl PlayerController {
             _scoped_resource: Cell::new(None),
             player: OnceCell::new(),
             controles: RefCell::new(Vec::new()),
+            paleta_aberta: Cell::new(false),
+            escondidos: Cell::new(false),
+            livres: RefCell::new(Vec::new()),
+            area_mouse: RefCell::new(None),
+            seta: RefCell::new(None),
+            onde_mouse: Cell::new(CGPoint::new(200.0, 200.0)),
         });
         let nil = None::<&AnyObject>;
         unsafe { msg_send![super(this), initWithNibName: nil, bundle: nil] }
@@ -438,7 +533,39 @@ impl PlayerController {
         self.view().flush();
     }
 
-    /// As teclas dos botoes, na ordem em que eles sao criados.
+    /// As opcoes que um botao personalizavel pode assumir.
+    ///
+    /// Mesma lista do APK. Segurar o botao anda pra proxima.
+    fn opcoes_livres() -> &'static [(&'static str, PhysicalKey, char)] {
+        &[
+            ("5", PhysicalKey::Digit5, '5'),
+            ("6", PhysicalKey::Digit6, '6'),
+            ("7", PhysicalKey::Digit7, '7'),
+            ("8", PhysicalKey::Digit8, '8'),
+            ("9", PhysicalKey::Digit9, '9'),
+            ("0", PhysicalKey::Digit0, '0'),
+            ("Q", PhysicalKey::KeyQ, 'q'),
+            ("W", PhysicalKey::KeyW, 'w'),
+            ("E", PhysicalKey::KeyE, 'e'),
+            ("R", PhysicalKey::KeyR, 'r'),
+            ("T", PhysicalKey::KeyT, 't'),
+            ("Y", PhysicalKey::KeyY, 'y'),
+            ("A", PhysicalKey::KeyA, 'a'),
+            ("S", PhysicalKey::KeyS, 's'),
+            ("D", PhysicalKey::KeyD, 'd'),
+            ("F", PhysicalKey::KeyF, 'f'),
+            ("G", PhysicalKey::KeyG, 'g'),
+            ("H", PhysicalKey::KeyH, 'h'),
+            ("V", PhysicalKey::KeyV, 'v'),
+            ("B", PhysicalKey::KeyB, 'b'),
+            ("P", PhysicalKey::KeyP, 'p'),
+            ("TAB", PhysicalKey::Tab, '\u{0009}'),
+            ("ESC", PhysicalKey::Escape, '\u{0}'),
+            ("ENTER", PhysicalKey::Enter, '\u{000D}'),
+        ]
+    }
+
+    /// As teclas dos botoes fixos, na ordem em que eles sao criados.
     ///
     /// Sao as mesmas do APK de Android: 1 2 3 4 / Z X C / setas / espaco.
     fn tabela_de_teclas() -> &'static [(&'static str, PhysicalKey, char)] {
@@ -467,7 +594,42 @@ impl PlayerController {
             return;
         }
 
-        for (indice, (rotulo, _, _)) in Self::tabela_de_teclas().iter().enumerate() {
+        // Recupera o que a pessoa escolheu da ultima vez.
+        {
+            let mut livres = self.ivars().livres.borrow_mut();
+            livres.clear();
+            let padroes = unsafe { NSUserDefaults::standardUserDefaults() };
+            for i in 0..LIVRES {
+                let chave = NSString::from_str(&format!("tecla_livre_{i}"));
+                let guardado = unsafe { padroes.integerForKey(&chave) };
+                livres.push(if guardado > 0 {
+                    Some((guardado - 1) as usize)
+                } else {
+                    None
+                });
+            }
+        }
+
+        // Os rotulos de todos os botoes, na ordem dos indices.
+        let mut rotulos: Vec<String> = Self::tabela_de_teclas()
+            .iter()
+            .map(|(r, _, _)| r.to_string())
+            .collect();
+        for i in 0..LIVRES {
+            rotulos.push(self.rotulo_livre(i));
+        }
+        rotulos.push(String::new()); // olho, desenhado com simbolo
+        rotulos.push("\u{21C4}".to_string()); // trocar teclas
+        let rotulos: Vec<(usize, String)> = rotulos.into_iter().enumerate().collect();
+
+        for (indice, rotulo) in rotulos.iter() {
+            let indice = *indice;
+            let rotulo = if indice == OLHO as usize {
+                "\u{25C9}".to_string()
+            } else {
+                rotulo.clone()
+            };
+            let rotulo = &rotulo;
             let botao = unsafe { UIButton::buttonWithType(UIButtonType::System, mtm) };
             unsafe {
                 botao.setTitle_forState(
@@ -499,6 +661,19 @@ impl PlayerController {
                 );
             }
             botao.layer().setCornerRadius(10.0);
+
+            // Segurar um personalizavel troca a tecla dele.
+            if (LIVRE_0..LIVRE_0 + LIVRES as isize).contains(&(indice as isize)) {
+                let gesto = unsafe {
+                    UILongPressGestureRecognizer::initWithTarget_action(
+                        mtm.alloc(),
+                        Some(self),
+                        Some(sel!(trocarTecla:)),
+                    )
+                };
+                botao.addGestureRecognizer(&gesto);
+            }
+
             view.addSubview(&botao);
             guardados.push(botao);
         }
@@ -506,6 +681,8 @@ impl PlayerController {
         // tracing nao saem, e a gente fica sem saber se isto rodou.
         eprintln!("CONTROLES criados: {}", guardados.len());
         drop(guardados);
+        self.criar_mouse();
+        self.aplicar_paleta();
         // Posiciona ja: se a gente esperar so pelo momento em que a tela se
         // arruma, e ele nao vier, os botoes ficam com tamanho zero — existem,
         // mas ninguem ve.
@@ -547,14 +724,22 @@ impl PlayerController {
             }
         };
 
-        // 1 2 3 4
+        // 1 2 3 4 — e, no mesmo lugar, os quatro primeiros personalizaveis.
         for i in 0..4 {
-            por(i, folga + (i as f64) * passo, folga, lado, lado);
+            let x = folga + (i as f64) * passo;
+            por(i, x, folga, lado, lado);
+            por(LIVRE_0 as usize + i, x, folga, lado, lado);
         }
-        // Z X C
+        // Z X C — e os tres personalizaveis seguintes, no mesmo lugar.
         for i in 0..3 {
-            por(4 + i, folga + (i as f64) * passo, folga + passo, lado, lado);
+            let x = folga + (i as f64) * passo;
+            por(4 + i, x, folga + passo, lado, lado);
+            por(LIVRE_0 as usize + 4 + i, x, folga + passo, lado, lado);
         }
+        // O olho fica depois do C, e nunca troca de lugar.
+        por(OLHO as usize, folga + 3.0 * passo, folga + passo, lado, lado);
+        // O trocar fica embaixo do Z.
+        por(PALETA as usize, folga, folga + 2.0 * passo, lado, lado);
         // setas em cruz
         let celula = lado * 0.85;
         let base = altura - celula * 3.0 - folga;
@@ -562,23 +747,211 @@ impl PlayerController {
         por(8, folga + celula, base, celula, celula); // cima
         por(9, folga + celula * 2.0, base + celula, celula, celula); // direita
         por(10, folga + celula, base + celula * 2.0, celula, celula); // baixo
-        // espaco
+        // espaco, embaixo a direita — meio bloco pra dentro, pra deixar a
+        // coluna da ponta livre pros botoes do proprio jogo.
         let largo = lado * 2.4;
         let alto = lado * 1.3;
-        por(
-            11,
-            largura - folga - largo - passo,
-            altura - folga - alto,
-            largo,
-            alto,
-        );
+        let x_espaco = largura - folga - largo - passo;
+        let y_espaco = altura - folga - alto;
+        por(11, x_espaco, y_espaco, largo, alto);
+
+        // a area do mouse fica EM CIMA do espaco, igual ao APK
+        let alto_area = lado * 2.6;
+        if let Some(area) = self.ivars().area_mouse.borrow().as_ref() {
+            area.setFrame(CGRect::new(
+                CGPoint::new(x_espaco, y_espaco - folga - alto_area),
+                CGSize::new(largo, alto_area),
+            ));
+        }
+        self.desenhar_seta();
+    }
+
+    /// Monta a area do ponteiro e a setinha.
+    fn criar_mouse(&self) {
+        let mtm = MainThreadMarker::from(self);
+        let view = self.view();
+
+        let area = unsafe { UIView::initWithFrame(mtm.alloc(), CGRect::ZERO) };
+        unsafe {
+            area.setBackgroundColor(Some(&UIColor::colorWithRed_green_blue_alpha(
+                0.04, 0.07, 0.13, 0.35,
+            )));
+        }
+        area.layer().setCornerRadius(10.0);
+
+        let pan = unsafe {
+            UIPanGestureRecognizer::initWithTarget_action(
+                mtm.alloc(),
+                Some(self),
+                Some(sel!(moverMouse:)),
+            )
+        };
+        let toque = unsafe {
+            UITapGestureRecognizer::initWithTarget_action(
+                mtm.alloc(),
+                Some(self),
+                Some(sel!(clicarMouse:)),
+            )
+        };
+        let segurar = unsafe {
+            UILongPressGestureRecognizer::initWithTarget_action(
+                mtm.alloc(),
+                Some(self),
+                Some(sel!(segurarMouse:)),
+            )
+        };
+        area.addGestureRecognizer(&pan);
+        area.addGestureRecognizer(&toque);
+        area.addGestureRecognizer(&segurar);
+        view.addSubview(&area);
+
+        // A setinha e so um texto: desenhar uma seta de verdade exigiria
+        // codigo de desenho, e o simbolo faz o mesmo servico.
+        let seta = unsafe { UILabel::initWithFrame(mtm.alloc(), CGRect::ZERO) };
+        unsafe {
+            seta.setText(Some(&NSString::from_str("\u{27A4}")));
+            seta.setTextColor(Some(&UIColor::whiteColor()));
+        }
+        seta.setUserInteractionEnabled(false);
+        view.addSubview(&seta);
+
+        *self.ivars().area_mouse.borrow_mut() = Some(area);
+        *self.ivars().seta.borrow_mut() = Some(seta);
+        eprintln!("MOUSE criado");
+    }
+
+    /// Poe a setinha onde o ponteiro esta.
+    fn desenhar_seta(&self) {
+        if let Some(seta) = self.ivars().seta.borrow().as_ref() {
+            let onde = self.ivars().onde_mouse.get();
+            seta.setFrame(CGRect::new(onde, CGSize::new(30.0, 34.0)));
+        }
+    }
+
+    /// Manda o evento de mouse pro jogo, na posicao da setinha.
+    ///
+    /// 0 = mover, 1 = apertar, 2 = soltar.
+    fn mandar_mouse(&self, tipo: u8) {
+        if self.ivars().player.get().is_none() {
+            return;
+        }
+        let onde = self.ivars().onde_mouse.get();
+        // A mesma conta que o aplicativo faz com o toque comum: de pontos da
+        // tela pra pontos do desenho.
+        let escala = self.view().contentScaleFactor() as f64;
+        let x = onde.x * escala;
+        let y = onde.y * escala;
+
+        let mut player_lock = self.player_lock();
+        player_lock.set_mouse_in_stage(true);
+        let evento = match tipo {
+            1 => PlayerEvent::MouseDown {
+                x,
+                y,
+                button: MouseButton::Left,
+                index: Some(1),
+            },
+            2 => PlayerEvent::MouseUp {
+                x,
+                y,
+                button: MouseButton::Left,
+            },
+            _ => PlayerEvent::MouseMove { x, y },
+        };
+        player_lock.handle_event(evento);
+    }
+
+    /// O rotulo de um botao personalizavel: a tecla escolhida, ou "+".
+    fn rotulo_livre(&self, posicao: usize) -> String {
+        match self.ivars().livres.borrow().get(posicao).copied().flatten() {
+            Some(i) => Self::opcoes_livres()[i].0.to_string(),
+            None => "+".to_string(),
+        }
+    }
+
+    /// Segurar o botao anda pra proxima tecla da lista, e depois volta ao
+    /// vazio. E mais simples que a grade do APK e faz o mesmo servico.
+    fn proxima_tecla_livre(&self, indice: isize) {
+        let posicao = (indice - LIVRE_0) as usize;
+        if posicao >= LIVRES {
+            return;
+        }
+        let proxima = {
+            let mut livres = self.ivars().livres.borrow_mut();
+            let atual = livres[posicao];
+            let proxima = match atual {
+                None => Some(0),
+                Some(i) if i + 1 < Self::opcoes_livres().len() => Some(i + 1),
+                Some(_) => None,
+            };
+            livres[posicao] = proxima;
+            proxima
+        };
+
+        // Guarda a escolha pra proxima vez que abrir o jogo.
+        let padroes = unsafe { NSUserDefaults::standardUserDefaults() };
+        let chave = NSString::from_str(&format!("tecla_livre_{posicao}"));
+        let valor = proxima.map(|i| i as isize + 1).unwrap_or(0);
+        unsafe { padroes.setInteger_forKey(valor, &chave) };
+
+        let rotulo = self.rotulo_livre(posicao);
+        if let Some(botao) = self.ivars().controles.borrow().get(indice as usize) {
+            unsafe {
+                botao.setTitle_forState(
+                    Some(&NSString::from_str(&rotulo)),
+                    UIControlState::Normal,
+                )
+            };
+        }
+    }
+
+    /// O olho: esconde todos os botoes menos ele proprio.
+    fn alternar_olho(&self) {
+        let escondendo = !self.ivars().escondidos.get();
+        self.ivars().escondidos.set(escondendo);
+        self.aplicar_paleta();
+    }
+
+    /// Troca as duas fileiras de cima entre as teclas do jogo e as suas.
+    fn alternar_paleta(&self) {
+        let aberta = !self.ivars().paleta_aberta.get();
+        self.ivars().paleta_aberta.set(aberta);
+        self.aplicar_paleta();
+    }
+
+    /// Decide quem aparece: o olho manda em todos, a paleta manda nas duas
+    /// fileiras de cima.
+    fn aplicar_paleta(&self) {
+        let escondidos = self.ivars().escondidos.get();
+        let paleta = self.ivars().paleta_aberta.get();
+        let guardados = self.ivars().controles.borrow();
+        for (indice, botao) in guardados.iter().enumerate() {
+            let indice = indice as isize;
+            let visivel = if indice == OLHO {
+                true
+            } else if escondidos {
+                false
+            } else if (LIVRE_0..LIVRE_0 + LIVRES as isize).contains(&indice) {
+                paleta
+            } else if (0..7).contains(&indice) {
+                !paleta
+            } else {
+                true
+            };
+            botao.setHidden(!visivel);
+        }
     }
 
     /// Manda a tecla pro jogo, como se fosse um teclado de verdade.
     fn mandar_tecla(&self, indice: isize, apertando: bool) {
-        let Some((_, fisica, caractere)) =
+        let ficha = if (LIVRE_0..LIVRE_0 + LIVRES as isize).contains(&indice) {
+            // Personalizavel: vale a tecla que a pessoa escolheu, se houver.
+            let escolha = self.ivars().livres.borrow()[(indice - LIVRE_0) as usize];
+            escolha.and_then(|i| Self::opcoes_livres().get(i).copied())
+        } else {
             Self::tabela_de_teclas().get(indice as usize).copied()
-        else {
+        };
+        let Some((_, fisica, caractere)) = ficha else {
             return;
         };
         let logica = if caractere == '\u{0}' {
