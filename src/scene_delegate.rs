@@ -7,6 +7,9 @@ use objc2_ui_kit::{
     UINavigationController, UIOpenURLContext, UIResponder, UIScene, UISceneConnectionOptions,
     UISceneDelegate, UISceneSession, UIWindow, UIWindowScene, UIWindowSceneDelegate,
 };
+use ruffle_frontend_utils::content::PlayingContent;
+use ruffle_frontend_utils::player_options::PlayerOptions;
+use url::Url;
 
 use crate::{storage, PlayerController};
 
@@ -44,18 +47,11 @@ define_class!(
             _connection_options: &UISceneConnectionOptions,
         ) {
             tracing::info!("scene:willConnectToSession:options:");
-            // Use this method to optionally configure and attach the UIWindow `window` to the provided UIWindowScene `scene`.
-            // If using a storyboard, the `window` property will automatically be initialized and attached to the scene.
-            // This delegate does not imply the connecting scene or session are new (see `application:configurationForConnectingSceneSession` instead).
         }
 
         #[unsafe(method(sceneDidDisconnect:))]
         fn sceneDidDisconnect(&self, _scene: &UIScene) {
             tracing::info!("sceneDidDisconnect:");
-            // Called as the scene is being released by the system.
-            // This occurs shortly after the scene enters the background, or when its session is discarded.
-            // Release any resources associated with this scene that can be re-created the next time the scene connects.
-            // The scene may re-connect later, as its session was not necessarily discarded (see `application:didDiscardSceneSessions` instead).
         }
 
         #[unsafe(method(sceneDidBecomeActive:))]
@@ -76,7 +72,6 @@ define_class!(
             tracing::info!("sceneWillResignActive:");
 
             // Stop playing.
-            // TODO: Is this the best place to do this?
             let nav = get_navigation_controller(scene);
             for controller in nav.viewControllers() {
                 if let Some(controller) = controller.downcast_ref::<PlayerController>() {
@@ -106,6 +101,22 @@ define_class!(
         #[unsafe(method(scene:openURLContexts:))]
         fn scene_openURLContexts(&self, scene: &UIScene, url_contexts: &NSSet<UIOpenURLContext>) {
             tracing::info!(?url_contexts, "scene:openURLContexts:");
+
+            // ENDERECO DA INTERNET: toca direto, sem passar pela biblioteca.
+            //
+            // O Ruffle nao le usuario e chave do endereco — ele espera receber
+            // esses valores separados. O DDTank precisa deles pra logar, e sem
+            // isso o jogo abre numa tela vazia.
+            //
+            // Entao, quando o endereco vem de fora e e da internet, a gente
+            // separa o que vem depois da interrogacao e entrega como parametros
+            // do jogo. E o mesmo que o navegador faz sozinho.
+            for context in url_contexts {
+                let url = context.URL();
+                if tocar_da_internet(scene, &url).is_some() {
+                    return;
+                }
+            }
 
             for context in url_contexts {
                 let url = context.URL();
@@ -160,6 +171,60 @@ fn get_navigation_controller(scene: &UIScene) -> Retained<UINavigationController
     let window = scene.windows().firstObject().unwrap();
     let root = window.rootViewController().unwrap();
     root.downcast::<UINavigationController>().unwrap()
+}
+
+/// Toca um jogo que mora na internet, com os parametros do endereco.
+///
+/// Aceita duas formas:
+///
+///   http://servidor/Loading.swf?user=fulano&key=abc
+///   deathnote://jogar?u=<o endereco acima, codificado>
+///
+/// A segunda existe porque o iPhone nao deixa um link comum da internet abrir
+/// um aplicativo — ele abriria o navegador. Com um esquema proprio, um botao
+/// numa pagina abre o jogo aqui dentro.
+///
+/// Devolve None quando o endereco nao e da internet, e ai o caminho antigo
+/// (biblioteca de arquivos) segue normalmente.
+fn tocar_da_internet(scene: &UIScene, nsurl: &NSURL) -> Option<()> {
+    let texto = nsurl.absoluteString()?.to_string();
+    let endereco = Url::parse(&texto).ok()?;
+
+    let alvo = match endereco.scheme() {
+        "deathnote" => {
+            // O endereco de verdade vem dentro do parametro "u".
+            let dentro = endereco
+                .query_pairs()
+                .find(|(chave, _)| chave == "u")?
+                .1
+                .into_owned();
+            Url::parse(&dentro).ok()?
+        }
+        "http" | "https" => endereco,
+        _ => return None,
+    };
+
+    // Tudo que vem depois da interrogacao vira parametro do jogo — e assim
+    // que o DDTank recebe usuario, chave, servidor e o resto.
+    let parametros: Vec<(String, String)> = alvo
+        .query_pairs()
+        .map(|(chave, valor)| (chave.into_owned(), valor.into_owned()))
+        .collect();
+
+    tracing::info!("tocando da internet: {alvo} ({} parametros)", parametros.len());
+
+    let nav = get_navigation_controller(scene);
+    nav.popToRootViewControllerAnimated(false);
+
+    let opcoes = PlayerOptions {
+        parameters,
+        ..Default::default()
+    };
+    let controller =
+        PlayerController::new(scene.mtm(), PlayingContent::DirectFile(alvo), opcoes);
+    nav.pushViewController_animated(&controller, true);
+
+    Some(())
 }
 
 fn play_url(scene: &UIScene, url: &NSURL) -> Option<()> {
