@@ -105,10 +105,7 @@ jobs:
           NOME=$(defaults read "$PWD/$APLICATIVO/Info" CFBundleIdentifier)
           echo "identificador: $NOME"
           xcrun simctl install "${{ steps.telefone.outputs.id }}" "$APLICATIVO"
-          xcrun simctl launch "${{ steps.telefone.outputs.id }}" "$NOME"
-          sleep 5
           mkdir -p fotos
-          xcrun simctl io "${{ steps.telefone.outputs.id }}" screenshot "fotos/1-abriu.png" || true
           echo "nome=$NOME" >> $GITHUB_OUTPUT
 
       # ENTREGAR O ENDERECO, nao baixar o arquivo.
@@ -127,23 +124,20 @@ jobs:
           if [ -z "$ENDERECO" ]; then
             ENDERECO="https://raw.githubusercontent.com/ruffle-rs/ruffle/master/tests/tests/swfs/avm2/hello_world/test.swf"
           fi
-          # ENDERECO http PERTENCE AO NAVEGADOR.
+          # ABRIR JA COM O ENDERECO, em vez de entregar depois.
           #
-          # O iPhone entrega qualquer "http://" pro Safari, sempre — nao ha
-          # como um aplicativo tomar isso pra si. Foi o que aconteceu na
-          # tentativa anterior: abriu o Safari perguntando se queria baixar o
-          # Loading.swf.
+          # Duas tentativas ensinaram por que:
+          #   - endereco "http://" o iPhone entrega ao Safari, sempre;
+          #   - endereco "deathnote://" vindo de fora faz ele perguntar
+          #     "abrir no Ruffle?", e maquina nenhuma responde essa pergunta.
           #
-          # Por isso existe o esquema proprio: embrulhamos o endereco do jogo
-          # dentro de um "deathnote://", que so o nosso aplicativo atende. E o
-          # mesmo embrulho que um botao no site vai usar.
-          if [ "${ENDERECO#deathnote://}" = "$ENDERECO" ]; then
-            CODIFICADO=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$ENDERECO")
-            ENDERECO="deathnote://jogar?u=$CODIFICADO"
-          fi
-          echo "entregando: $ENDERECO"
-          xcrun simctl openurl "$ID" "$ENDERECO"
-          echo "resultado da entrega: $?"
+          # Passando na abertura do aplicativo nao ha pergunta nem navegador.
+          # Pro jogador continua valendo o "deathnote://" do botao do site.
+          echo "abrindo com: $ENDERECO"
+          xcrun simctl launch "$ID" "${{ steps.abrir.outputs.nome }}" --jogo "$ENDERECO"
+          echo "resultado: $?"
+          sleep 5
+          xcrun simctl io "$ID" screenshot "fotos/1-abriu.png" || true
           exit 0
 
       # Uma foto a cada 10 segundos, por dois minutos. O jogo demora, e uma
