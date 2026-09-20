@@ -531,7 +531,13 @@ impl PlayerController {
             return;
         }
 
-        let lado = altura * 0.13;
+        // O tamanho vem do LADO MENOR da tela, nao da altura.
+        //
+        // Medindo pela altura, em pe os botoes saiam gigantes: o 4 ficava fora
+        // da tela e o espaco caia em cima das setas. Pelo lado menor, eles
+        // ficam certos deitado (que e o normal) e continuam utilizaveis em pe.
+        let menor = if largura < altura { largura } else { altura };
+        let lado = menor * 0.13;
         let folga = lado * 0.15;
         let passo = lado + folga;
 
