@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       swf:
-        description: "Endereco de um .swf pra testar (em branco = o padrao)"
+        description: "Endereco do jogo, com usuario e chave (em branco = um teste simples)"
         required: false
         default: ""
 
@@ -111,32 +111,24 @@ jobs:
           xcrun simctl io "${{ steps.telefone.outputs.id }}" screenshot "fotos/1-abriu.png" || true
           echo "nome=$NOME" >> $GITHUB_OUTPUT
 
-      - name: Buscar um Flash pra testar
-        id: arquivo
-        run: |
-          set -e
-          ENDERECO="${{ inputs.swf }}"
-          if [ -z "$ENDERECO" ]; then
-            # Um dos arquivos de teste do proprio Ruffle: pequeno e estavel.
-            ENDERECO="https://raw.githubusercontent.com/ruffle-rs/ruffle/master/tests/tests/swfs/avm2/hello_world/test.swf"
-          fi
-          echo "baixando: $ENDERECO"
-          curl -fsSL "$ENDERECO" -o teste.swf
-          ls -lh teste.swf
-          file teste.swf
-          echo "caminho=$PWD/teste.swf" >> $GITHUB_OUTPUT
-
-      # UMA tentativa so, e depois OLHAR POR DOIS MINUTOS.
+      # ENTREGAR O ENDERECO, nao baixar o arquivo.
       #
-      # Antes eu fazia duas entregas e reiniciava o aplicativo no meio. As
-      # duas funcionaram, entao a duvida acabou — e reiniciar agora seria um
-      # tiro no pe: o DDTank leva mais de um minuto carregando, e reiniciar
-      # mataria o carregamento na metade.
-      - name: Mandar o aplicativo abrir o Flash
+      # Antes a gente baixava um .swf e entregava o arquivo. Agora o
+      # aplicativo aceita o endereco do jogo inteiro, com usuario e chave, e
+      # busca sozinho — que e como ele vai funcionar na mao do jogador.
+      #
+      # Em branco, usa um Flash de teste do proprio projeto Ruffle, so pra
+      # conferir que a entrega funciona.
+      - name: Mandar o aplicativo abrir
         run: |
           set +e
           ID="${{ steps.telefone.outputs.id }}"
-          xcrun simctl openurl "$ID" "file://${{ steps.arquivo.outputs.caminho }}"
+          ENDERECO="${{ inputs.swf }}"
+          if [ -z "$ENDERECO" ]; then
+            ENDERECO="https://raw.githubusercontent.com/ruffle-rs/ruffle/master/tests/tests/swfs/avm2/hello_world/test.swf"
+          fi
+          echo "entregando: $ENDERECO"
+          xcrun simctl openurl "$ID" "$ENDERECO"
           echo "resultado da entrega: $?"
           exit 0
 
