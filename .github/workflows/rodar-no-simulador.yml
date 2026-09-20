@@ -133,9 +133,17 @@ jobs:
           #
           # Passando na abertura do aplicativo nao ha pergunta nem navegador.
           # Pro jogador continua valendo o "deathnote://" do botao do site.
+          # ABRIR COM O CONSOLE LIGADO.
+          #
+          # O aplicativo vem morrendo por volta dos 40 segundos sem deixar
+          # recado no registro do sistema. Falta de recado ali e tipico de
+          # estouro do proprio programa: a mensagem sai pela saida de texto,
+          # que so aparece com o console ligado.
+          #
+          # Roda em segundo plano porque o console prende o terminal ate o
+          # aplicativo fechar — e a gente precisa fotografar nesse meio tempo.
           echo "abrindo com: $ENDERECO"
-          xcrun simctl launch "$ID" "${{ steps.abrir.outputs.nome }}" --jogo "$ENDERECO"
-          echo "resultado: $?"
+          xcrun simctl launch --console-pty "$ID" "${{ steps.abrir.outputs.nome }}"             --jogo "$ENDERECO" > fotos/o-que-o-app-disse.txt 2>&1 &
           sleep 5
           xcrun simctl io "$ID" screenshot "fotos/1-abriu.png" || true
           exit 0
@@ -150,6 +158,9 @@ jobs:
             echo "foto $i (segundo $((10#$i * 10)))"
           done
           ls -lh fotos
+          echo ""
+          echo "=================== O QUE O APLICATIVO DISSE =================="
+          cat fotos/o-que-o-app-disse.txt 2>/dev/null | tail -60
 
       # RELATORIO DE FALHA.
       #
@@ -163,10 +174,12 @@ jobs:
           mkdir -p fotos
           echo "--- relatorios encontrados:"
           ls -la ~/Library/Logs/DiagnosticReports/ 2>/dev/null || echo "(nenhum)"
-          for arquivo in ~/Library/Logs/DiagnosticReports/*uffle*; do
-            [ -e "$arquivo" ] || continue
+          # Procura em todo lugar onde relatorio de falha costuma cair, e
+          # nao so na pasta principal — no simulador ele as vezes vai parar
+          # dentro da pasta do proprio aparelho.
+          find ~/Library/Logs ~/Library/Developer/CoreSimulator             -name "*.ips" -mmin -15 2>/dev/null | while read -r arquivo; do
             echo "copiando $arquivo"
-            cp "$arquivo" fotos/ || true
+            cp "$arquivo" fotos/ 2>/dev/null || true
           done
           # O trecho que interessa costuma ser o comeco: motivo e pilha.
           for arquivo in fotos/*uffle*; do
