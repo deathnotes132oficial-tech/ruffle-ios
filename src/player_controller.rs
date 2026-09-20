@@ -1,4 +1,4 @@
-use std::cell::{Cell, OnceCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::fs::File;
 use std::path::Path;
 use std::rc::Rc;
@@ -9,16 +9,20 @@ use std::{fmt, io};
 use block2::RcBlock;
 use objc2::rc::{Allocated, Retained};
 use objc2::runtime::AnyObject;
-use objc2::{define_class, msg_send, DefinedClass as _, MainThreadOnly, Message};
+use objc2::{define_class, msg_send, sel, DefinedClass as _, MainThreadOnly, Message};
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_foundation::{
     MainThreadMarker, NSBundle, NSCoder, NSObjectProtocol, NSRunLoop, NSString,
 };
-use objc2_ui_kit::UIViewController;
+use objc2_ui_kit::{
+    UIButton, UIButtonType, UIColor, UIControlEvents, UIControlState, UINavigationController,
+    UIViewController,
+};
 use ruffle_core::backend::navigator::OwnedFuture;
 use ruffle_core::backend::storage::StorageBackend;
 use ruffle_core::config::Letterbox;
-use ruffle_core::{LoadBehavior, Player, PlayerBuilder};
+use ruffle_core::events::{KeyDescriptor, KeyLocation, LogicalKey, PhysicalKey};
+use ruffle_core::{LoadBehavior, Player, PlayerBuilder, PlayerEvent};
 use ruffle_frontend_utils::backends::audio::CpalAudioBackend;
 use ruffle_frontend_utils::backends::navigator::{
     self, ExternalNavigatorBackend, NavigatorInterface,
@@ -89,6 +93,10 @@ pub struct Ivars {
     _scoped_resource: Cell<Option<SecurityScopedResource>>,
 
     player: OnceCell<Arc<Mutex<Player>>>,
+
+    /// Os botoes de toque, guardados pra poder recoloca-los quando a tela
+    /// muda de tamanho (girar o aparelho, por exemplo).
+    controles: RefCell<Vec<Retained<UIButton>>>,
 }
 
 impl fmt::Debug for Ivars {
@@ -163,6 +171,12 @@ define_class!(
             let _: () = unsafe { msg_send![super(self), viewIsAppearing: animated] };
         }
 
+        #[unsafe(method(viewDidLayoutSubviews))]
+        fn _view_did_layout_subviews(&self) {
+            let _: () = unsafe { msg_send![super(self), viewDidLayoutSubviews] };
+            self.posicionar_controles();
+        }
+
         #[unsafe(method(viewWillDisappear:))]
         fn _view_will_disappear(&self, animated: bool) {
             self.view_will_disappear(animated);
@@ -175,6 +189,20 @@ define_class!(
             self.view_did_disappear(animated);
             // Docs say to call super
             let _: () = unsafe { msg_send![super(self), viewDidDisappear: animated] };
+        }
+    }
+
+    /// Os botoes de toque chamam estes dois.
+    #[allow(non_snake_case)]
+    impl PlayerController {
+        #[unsafe(method(controleApertado:))]
+        fn controleApertado(&self, botao: &UIButton) {
+            self.mandar_tecla(botao.tag(), true);
+        }
+
+        #[unsafe(method(controleSolto:))]
+        fn controleSolto(&self, botao: &UIButton) {
+            self.mandar_tecla(botao.tag(), false);
         }
     }
 
@@ -312,9 +340,13 @@ impl PlayerController {
                 player_options.align.unwrap_or_default(),
                 player_options.force_align.unwrap_or_default(),
             )
+            // FORCAR a escala: o DDTank manda o palco nao redimensionar
+            // (scaleMode = NoScale) logo no comeco. Sem forcar, ele aparece em
+            // tamanho original, cortado na direita e com faixa preta embaixo —
+            // foi o que a primeira foto do simulador mostrou.
             .with_scale_mode(
                 player_options.scale.unwrap_or_default(),
-                player_options.force_scale.unwrap_or_default(),
+                player_options.force_scale.unwrap_or(true),
             )
             .with_load_behavior(
                 player_options
@@ -352,6 +384,8 @@ impl PlayerController {
         );
         drop(player_lock);
 
+        self.criar_controles();
+
         view.set_player(player.clone());
         self.ivars()
             .player
@@ -360,6 +394,13 @@ impl PlayerController {
     }
 
     fn view_is_appearing(&self, _animated: bool) {
+        // A barra de navegacao come uma faixa do alto da tela e fica por cima
+        // do jogo. Quem joga nao precisa dela; pra voltar, basta o gesto de
+        // arrastar da borda esquerda.
+        if let Some(nav) = self.navigationController() {
+            unsafe { nav.setNavigationBarHidden_animated(true, _animated) };
+        }
+
         tracing::info!("player viewIsAppearing:");
 
         self.view().start();
@@ -375,6 +416,152 @@ impl PlayerController {
         tracing::info!("player viewDidDisappear:");
 
         self.view().flush();
+    }
+
+    /// As teclas dos botoes, na ordem em que eles sao criados.
+    ///
+    /// Sao as mesmas do APK de Android: 1 2 3 4 / Z X C / setas / espaco.
+    fn tabela_de_teclas() -> &'static [(&'static str, PhysicalKey, char)] {
+        &[
+            ("1", PhysicalKey::Digit1, '1'),
+            ("2", PhysicalKey::Digit2, '2'),
+            ("3", PhysicalKey::Digit3, '3'),
+            ("4", PhysicalKey::Digit4, '4'),
+            ("Z", PhysicalKey::KeyZ, 'z'),
+            ("X", PhysicalKey::KeyX, 'x'),
+            ("C", PhysicalKey::KeyC, 'c'),
+            ("\u{2190}", PhysicalKey::ArrowLeft, '\u{0}'),
+            ("\u{2191}", PhysicalKey::ArrowUp, '\u{0}'),
+            ("\u{2192}", PhysicalKey::ArrowRight, '\u{0}'),
+            ("\u{2193}", PhysicalKey::ArrowDown, '\u{0}'),
+            ("ESPACO", PhysicalKey::Space, ' '),
+        ]
+    }
+
+    /// Monta os botoes por cima do jogo, uma vez so.
+    fn criar_controles(&self) {
+        let mtm = MainThreadMarker::from(self);
+        let view = self.view();
+        let mut guardados = self.ivars().controles.borrow_mut();
+        if !guardados.is_empty() {
+            return;
+        }
+
+        for (indice, (rotulo, _, _)) in Self::tabela_de_teclas().iter().enumerate() {
+            let botao = unsafe { UIButton::buttonWithType(UIButtonType::System, mtm) };
+            unsafe {
+                botao.setTitle_forState(
+                    Some(&NSString::from_str(rotulo)),
+                    UIControlState::Normal,
+                );
+                botao.setTitleColor_forState(
+                    Some(&UIColor::whiteColor()),
+                    UIControlState::Normal,
+                );
+                botao.setBackgroundColor(Some(&UIColor::colorWithRed_green_blue_alpha(
+                    0.04, 0.07, 0.13, 0.55,
+                )));
+                botao.setTag(indice as isize);
+
+                // Apertar manda a tecla; soltar solta. Tres formas de soltar
+                // porque o dedo pode sair de cima do botao antes de levantar.
+                botao.addTarget_action_forControlEvents(
+                    Some(self),
+                    sel!(controleApertado:),
+                    UIControlEvents::TouchDown,
+                );
+                botao.addTarget_action_forControlEvents(
+                    Some(self),
+                    sel!(controleSolto:),
+                    UIControlEvents::TouchUpInside
+                        | UIControlEvents::TouchUpOutside
+                        | UIControlEvents::TouchCancel,
+                );
+            }
+            botao.layer().setCornerRadius(10.0);
+            view.addSubview(&botao);
+            guardados.push(botao);
+        }
+        tracing::info!("controles criados: {}", guardados.len());
+    }
+
+    /// Recoloca os botoes conforme o tamanho atual da tela.
+    ///
+    /// As proporcoes sao as mesmas do APK: as teclas de acao a esquerda em
+    /// cima, as setas em cruz embaixo a esquerda, e o espaco a direita, meio
+    /// bloco pra dentro — a coluna da ponta fica livre pros botoes do jogo.
+    fn posicionar_controles(&self) {
+        let guardados = self.ivars().controles.borrow();
+        if guardados.is_empty() {
+            return;
+        }
+        let limites = self.view().bounds();
+        let largura = limites.size.width;
+        let altura = limites.size.height;
+
+        let lado = altura * 0.13;
+        let folga = lado * 0.15;
+        let passo = lado + folga;
+
+        let por = |indice: usize, x: f64, y: f64, w: f64, h: f64| {
+            if let Some(botao) = guardados.get(indice) {
+                botao.setFrame(CGRect::new(CGPoint::new(x, y), CGSize::new(w, h)));
+            }
+        };
+
+        // 1 2 3 4
+        for i in 0..4 {
+            por(i, folga + (i as f64) * passo, folga, lado, lado);
+        }
+        // Z X C
+        for i in 0..3 {
+            por(4 + i, folga + (i as f64) * passo, folga + passo, lado, lado);
+        }
+        // setas em cruz
+        let celula = lado * 0.85;
+        let base = altura - celula * 3.0 - folga;
+        por(7, folga, base + celula, celula, celula); // esquerda
+        por(8, folga + celula, base, celula, celula); // cima
+        por(9, folga + celula * 2.0, base + celula, celula, celula); // direita
+        por(10, folga + celula, base + celula * 2.0, celula, celula); // baixo
+        // espaco
+        let largo = lado * 2.4;
+        let alto = lado * 1.3;
+        por(
+            11,
+            largura - folga - largo - passo,
+            altura - folga - alto,
+            largo,
+            alto,
+        );
+    }
+
+    /// Manda a tecla pro jogo, como se fosse um teclado de verdade.
+    fn mandar_tecla(&self, indice: isize, apertando: bool) {
+        let Some((_, fisica, caractere)) =
+            Self::tabela_de_teclas().get(indice as usize).copied()
+        else {
+            return;
+        };
+        let logica = if caractere == '\u{0}' {
+            LogicalKey::Unknown
+        } else {
+            LogicalKey::Character(caractere)
+        };
+        let key = KeyDescriptor {
+            physical_key: fisica,
+            logical_key: logica,
+            key_location: KeyLocation::Standard,
+        };
+        let evento = if apertando {
+            PlayerEvent::KeyDown { key }
+        } else {
+            PlayerEvent::KeyUp { key }
+        };
+        if self.ivars().player.get().is_some() {
+            let mut player_lock = self.player_lock();
+            player_lock.handle_event(evento);
+        }
     }
 
     pub fn view(&self) -> Retained<PlayerView> {
