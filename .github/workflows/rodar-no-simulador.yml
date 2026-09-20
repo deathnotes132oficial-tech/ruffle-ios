@@ -60,13 +60,20 @@ jobs:
       # ARCHS=arm64 existe porque por padrao ele tenta montar um aplicativo que
       # sirva em simulador Intel E Apple ao mesmo tempo. O pedaco Intel nem
       # existe no Rust com esse nome, e a maquina do GitHub e Apple.
+      #
+      # RELEASE, e nao Debug. Em Debug o Ruffle carrega conferencias internas
+      # que derrubam o programa inteiro ao primeiro texto estranho — foi o que
+      # matou o teste anterior ("assertion failed: ch <= 0x10FFFF"), e o
+      # DDTank manda texto chines o tempo todo. Essas conferencias nao existem
+      # no aplicativo de verdade, entao testar em Debug media a coisa errada.
+      # Custo: compila mais devagar.
       - name: Compilar para o simulador
         run: |
           set -o pipefail
           xcodebuild \
             -project "${{ steps.achar.outputs.projeto }}" \
             -scheme "${{ steps.achar.outputs.esquema }}" \
-            -configuration Debug \
+            -configuration Release \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath construcao \
             CODE_SIGNING_ALLOWED=NO \
