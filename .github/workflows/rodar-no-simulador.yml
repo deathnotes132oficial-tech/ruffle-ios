@@ -112,6 +112,13 @@ jobs:
           echo "aplicativo: $APLICATIVO"
           NOME=$(defaults read "$PWD/$APLICATIVO/Info" CFBundleIdentifier)
           echo "identificador: $NOME"
+          # O QUE FOI PARAR DENTRO DO APLICATIVO.
+          #
+          # O arquivo de configuracao no projeto diz uma coisa e o aplicativo
+          # se comporta de outra. Em vez de supor qual manda, imprimimos o que
+          # ficou dentro do produto final.
+          echo "--- orientacao e esquema no aplicativo construido:"
+          plutil -p "$APLICATIVO/Info.plist" | grep -iE "orientation|URLScheme|URLName" || echo "(nao achei nada disso)"
           xcrun simctl install "${{ steps.telefone.outputs.id }}" "$APLICATIVO"
           mkdir -p fotos
           echo "nome=$NOME" >> $GITHUB_OUTPUT
