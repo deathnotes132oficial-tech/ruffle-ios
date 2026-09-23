@@ -147,9 +147,13 @@ jobs:
       # "signingStyle automatic" mais a chave da Apple: o Xcode cria no painel
       # o certificado e o perfil de distribuicao que faltarem.
       #
-      # O nome do metodo mudou de "app-store" pra "app-store-connect" nas
-      # versoes novas do Xcode. Em vez de adivinhar qual Mac o GitHub vai dar
-      # hoje, tentamos o novo e, se ele recusar, o antigo.
+      # UMA TENTATIVA SO.
+      #
+      # Antes isto tentava "app-store-connect" e, se falhasse, repetia com o
+      # nome antigo "app-store". Parecia prudente, mas escondia o problema: o
+      # erro que sobrava no fim era o da SEGUNDA tentativa, e a causa de
+      # verdade (permissao da chave) ficava enterrada na primeira. Uma
+      # tentativa so, e o erro que aparece e o que importa.
       - name: Assinar e empacotar o .ipa
         env:
           ID_CHAVE: ${{ secrets.APPLE_KEY_ID }}
@@ -179,7 +183,7 @@ jobs:
               -authenticationKeyID "$ID_CHAVE" \
               -authenticationKeyIssuerID "$ID_EMISSOR"
           }
-          empacotar app-store-connect || empacotar app-store
+          empacotar app-store-connect
           ls -lh saida/*.ipa
 
       - name: Mandar pro TestFlight
