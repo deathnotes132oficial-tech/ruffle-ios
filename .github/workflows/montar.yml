@@ -7,9 +7,6 @@
 # automatico, e o resultado vai direto pro TestFlight, de onde o testador
 # instala no aparelho dele.
 #
-# A versao anterior deste arquivo so respondia "compila?". Agora que a conta da
-# Apple foi aprovada, ele faz o caminho inteiro.
-#
 # O QUE PRECISA ESTAR PRONTO ANTES (uma vez so)
 #   - os tres segredos no repositorio: APPLE_KEY_ID, APPLE_ISSUER_ID, APPLE_P8
 #   - o identificador registrado no painel da Apple (BUNDLE abaixo)
@@ -85,51 +82,45 @@ jobs:
           # Nunca mostrar o conteudo: so conferir que chegou inteiro.
           wc -c < ~/.appstoreconnect/private_keys/AuthKey_$ID_CHAVE.p8
 
-      # ASSINATURA AUTOMATICA, DE DISTRIBUICAO.
+      # COMPILAR SEM ASSINAR. A ASSINATURA FICA TODA PRO EMPACOTAMENTO.
       #
-      # Com a chave, o proprio Xcode cria no painel da Apple o certificado e o
-      # perfil que faltarem (-allowProvisioningUpdates). Sem isso seria preciso
-      # gerar tudo a mao e guardar mais segredos aqui.
+      # Duas tentativas anteriores esbarraram em comportamentos opostos do
+      # Xcode, e nenhuma tem saida por ajuste fino:
       #
+      #   - so assinatura automatica: pra COMPILAR ele quer um perfil de
+      #     DESENVOLVIMENTO, que serve pra instalar em aparelhos conhecidos —
+      #     e a Apple exige pelo menos um aparelho cadastrado. Erro: "your team
+      #     has no devices from which to generate a provisioning profile". Nao
+      #     temos aparelho, e nao precisamos: quem instala e o TestFlight.
+      #   - automatica MAIS a identidade de distribuicao na mao: "conflicting
+      #     provisioning settings", porque sao duas ordens diferentes sobre a
+      #     mesma coisa.
       #
-      # CODE_SIGN_IDENTITY="Apple Distribution" NAO E DETALHE.
-      # Sem essa linha o Xcode assume que o build e de DESENVOLVIMENTO e
-      # tenta criar um perfil desse tipo. Perfil de desenvolvimento serve
-      # pra instalar em aparelhos conhecidos, entao a Apple exige pelo menos
-      # um aparelho cadastrado — dai o erro "your team has no devices from
-      # which to generate a provisioning profile". Nao temos aparelho
-      # cadastrado, e nao precisamos: quem instala e o TestFlight, que usa
-      # perfil de DISTRIBUICAO. Dizendo isso aqui, o Xcode cria o perfil
-      # certo sozinho, sem aparelho nenhum.
+      # A saida e nao assinar agora. O passo seguinte empacota e assina, e la o
+      # alvo e declaradamente a App Store: o Xcode cria o perfil de
+      # DISTRIBUICAO, que nao precisa de aparelho nenhum, e nao ha conflito
+      # porque existe uma unica decisao de assinatura no caminho todo. Compilar
+      # sem assinar ja era o que o robo antigo fazia, e funcionava.
+      #
       # O NUMERO DA COMPILACAO vem do contador do GitHub. O TestFlight recusa
-      # um numero repetido, e o do projeto e fixo: sem isto, o segundo envio
+      # numero repetido, e o do projeto e fixo: sem isto, o segundo envio
       # falharia com "ja existe uma compilacao com esse numero".
       #
-      # CODE_SIGN_ENTITLEMENTS VAZIO — e o conserto do erro de assinatura.
-      # O ruffle-ios.entitlements do projeto pede permissoes que so existem no
-      # macOS (app-sandbox, files.user-selected.read-write, network.client). No
-      # iPhone elas nao existem: a assinatura automatica procura um perfil que
-      # as conceda, nao acha, e desiste imprimindo aquela sugestao de "configure
-      # manualmente". O projeto do Ruffle serve Mac e iPhone com o mesmo
-      # arquivo; pro iPhone ele sobra. Zerado aqui, o app assina sem pedir
-      # nada — e no iOS o acesso a rede ja e livre.
+      # CODE_SIGN_ENTITLEMENTS VAZIO: o ruffle-ios.entitlements do projeto pede
+      # permissoes que so existem no macOS (app-sandbox, arquivos, rede). No
+      # iPhone elas nao existem e derrubam a assinatura. No iOS o acesso a rede
+      # ja e livre, entao nao se perde nada.
       #
-      # A TELA DEITADA, agora de verdade.
-      # O projeto tem GENERATE_INFOPLIST_FILE = YES, e nesse modo o Xcode
-      # MISTURA as configuracoes INFOPLIST_KEY_* POR CIMA do Info.plist. A
-      # lista "so deitado" do arquivo era sobrescrita pela do projeto, que
-      # permite em pe — dai o app abria em pe no simulador. A tentativa
-      # anterior passou "INFOPLIST_KEY_UISupportedInterfaceOrientations", SEM o
-      # sufixo _iPhone: e outra chave, e no iPhone quem manda e a com sufixo.
+      # A TELA DEITADA: o projeto tem GENERATE_INFOPLIST_FILE = YES, e nesse
+      # modo o Xcode MISTURA as configuracoes INFOPLIST_KEY_* por cima do
+      # Info.plist — a lista "so deitado" do arquivo era sobrescrita pela do
+      # projeto, que permite em pe. A tentativa anterior usou a chave SEM o
+      # sufixo _iPhone, que e outra chave e nao vale no iPhone.
       #
-      # SO IPHONE (TARGETED_DEVICE_FAMILY=1). O projeto vem marcado tambem pra
-      # iPad e visor. Um app de iPad que aceita so uma orientacao e recusado na
-      # conferencia da Apple, a menos que se declare tela cheia — e nao ha
-      # motivo pra abrir essa frente agora.
-      - name: Compilar e assinar
-        env:
-          ID_CHAVE: ${{ secrets.APPLE_KEY_ID }}
-          ID_EMISSOR: ${{ secrets.APPLE_ISSUER_ID }}
+      # SO IPHONE (TARGETED_DEVICE_FAMILY=1): o projeto vem marcado tambem pra
+      # iPad e visor, e app de iPad que aceita uma orientacao so e recusado na
+      # conferencia da Apple.
+      - name: Compilar
         run: |
           set -o pipefail
           xcodebuild \
@@ -138,29 +129,28 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath construcao/app.xcarchive \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$ID_CHAVE.p8 \
-            -authenticationKeyID "$ID_CHAVE" \
-            -authenticationKeyIssuerID "$ID_EMISSOR" \
-            CODE_SIGN_STYLE=Automatic \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM=$TIME \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            CODE_SIGN_ENTITLEMENTS= \
             PRODUCT_BUNDLE_IDENTIFIER=$BUNDLE \
             MARKETING_VERSION=1.0 \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
-            CODE_SIGN_ENTITLEMENTS= \
             TARGETED_DEVICE_FAMILY=1 \
             INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
             INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
             INFOPLIST_KEY_ITSAppUsesNonExemptEncryption=NO \
             archive
 
-      # AS INSTRUCOES DE EMPACOTAMENTO.
+      # AQUI O APP E ASSINADO, uma vez so, pra App Store.
+      #
+      # "signingStyle automatic" mais a chave da Apple: o Xcode cria no painel
+      # o certificado e o perfil de distribuicao que faltarem.
       #
       # O nome do metodo mudou de "app-store" pra "app-store-connect" nas
       # versoes novas do Xcode. Em vez de adivinhar qual Mac o GitHub vai dar
       # hoje, tentamos o novo e, se ele recusar, o antigo.
-      - name: Empacotar o .ipa
+      - name: Assinar e empacotar o .ipa
         env:
           ID_CHAVE: ${{ secrets.APPLE_KEY_ID }}
           ID_EMISSOR: ${{ secrets.APPLE_ISSUER_ID }}
