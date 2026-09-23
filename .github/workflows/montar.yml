@@ -94,6 +94,28 @@ jobs:
       # O NUMERO DA COMPILACAO vem do contador do GitHub. O TestFlight recusa
       # um numero repetido, e o do projeto e fixo: sem isto, o segundo envio
       # falharia com "ja existe uma compilacao com esse numero".
+      #
+      # CODE_SIGN_ENTITLEMENTS VAZIO — e o conserto do erro de assinatura.
+      # O ruffle-ios.entitlements do projeto pede permissoes que so existem no
+      # macOS (app-sandbox, files.user-selected.read-write, network.client). No
+      # iPhone elas nao existem: a assinatura automatica procura um perfil que
+      # as conceda, nao acha, e desiste imprimindo aquela sugestao de "configure
+      # manualmente". O projeto do Ruffle serve Mac e iPhone com o mesmo
+      # arquivo; pro iPhone ele sobra. Zerado aqui, o app assina sem pedir
+      # nada — e no iOS o acesso a rede ja e livre.
+      #
+      # A TELA DEITADA, agora de verdade.
+      # O projeto tem GENERATE_INFOPLIST_FILE = YES, e nesse modo o Xcode
+      # MISTURA as configuracoes INFOPLIST_KEY_* POR CIMA do Info.plist. A
+      # lista "so deitado" do arquivo era sobrescrita pela do projeto, que
+      # permite em pe — dai o app abria em pe no simulador. A tentativa
+      # anterior passou "INFOPLIST_KEY_UISupportedInterfaceOrientations", SEM o
+      # sufixo _iPhone: e outra chave, e no iPhone quem manda e a com sufixo.
+      #
+      # SO IPHONE (TARGETED_DEVICE_FAMILY=1). O projeto vem marcado tambem pra
+      # iPad e visor. Um app de iPad que aceita so uma orientacao e recusado na
+      # conferencia da Apple, a menos que se declare tela cheia — e nao ha
+      # motivo pra abrir essa frente agora.
       - name: Compilar e assinar
         env:
           ID_CHAVE: ${{ secrets.APPLE_KEY_ID }}
@@ -115,6 +137,11 @@ jobs:
             PRODUCT_BUNDLE_IDENTIFIER=$BUNDLE \
             MARKETING_VERSION=1.0 \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CODE_SIGN_ENTITLEMENTS= \
+            TARGETED_DEVICE_FAMILY=1 \
+            INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
+            INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
+            INFOPLIST_KEY_ITSAppUsesNonExemptEncryption=NO \
             archive
 
       # AS INSTRUCOES DE EMPACOTAMENTO.
