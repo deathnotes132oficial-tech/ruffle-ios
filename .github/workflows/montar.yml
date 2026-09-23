@@ -1,26 +1,40 @@
-# Monta o Ruffle para iPhone num Mac do GitHub.
+# Compila o app de iPhone, ASSINA e manda pro TestFlight.
 #
 # POR QUE ISTO EXISTE
 # -------------------
 # Aplicativo de iPhone so se compila em Mac, e nos nao temos um. O GitHub
-# empresta Macs de graca pra projetos publicos — entao a maquina e deles, o
-# trabalho e automatico, e o que volta pra gente e o aplicativo pronto.
+# empresta Macs de graca pra projetos publicos: a maquina e deles, o trabalho e
+# automatico, e o resultado vai direto pro TestFlight, de onde o testador
+# instala no aparelho dele.
 #
-# Serve pra responder UMA pergunta: o projeto do Ruffle para iPhone compila e
-# vira um aplicativo de verdade? Se compilar, existe caminho. Se nao compilar,
-# a gente descobriu sem gastar nada.
+# A versao anterior deste arquivo so respondia "compila?". Agora que a conta da
+# Apple foi aprovada, ele faz o caminho inteiro.
 #
-# O arquivo que sai NAO esta assinado, entao ainda nao instala sozinho num
-# aparelho. Isso e o passo seguinte, e so vale a pena se este aqui der certo.
+# O QUE PRECISA ESTAR PRONTO ANTES (uma vez so)
+#   - os tres segredos no repositorio: APPLE_KEY_ID, APPLE_ISSUER_ID, APPLE_P8
+#   - o identificador registrado no painel da Apple (BUNDLE abaixo)
+#   - o app criado no App Store Connect, apontando pra esse identificador
+#
+# O QUE ISTO NAO RESPONDE
+# -----------------------
+# Velocidade. So o aparelho de verdade responde isso — e e justamente pra isso
+# que o app vai pro TestFlight.
 
-name: Montar o Ruffle para iPhone
+name: Mandar pro TestFlight
 
 # So roda quando voce mandar, pelo botao. Nada acontece sozinho.
 on:
   workflow_dispatch:
 
+env:
+  # O endereco do app na Apple. NAO PODE MUDAR depois do primeiro envio.
+  BUNDLE: com.deathnotestore.cfclient
+  # O numero do time, do painel da Apple. Nao e segredo: ele aparece dentro de
+  # qualquer app publicado.
+  TIME: HUJNSQWP3K
+
 jobs:
-  montar:
+  enviar:
     runs-on: macos-latest
 
     steps:
@@ -29,35 +43,61 @@ jobs:
 
       - name: Mostrar as ferramentas da maquina
         run: |
-          echo "--- Xcode:"
           xcodebuild -version
-          echo "--- Rust:"
           rustc --version || echo "(sem rust ainda)"
 
-      - name: Instalar o Rust e o alvo de iPhone
+      # SEM mandar trocar de versao do Rust.
+      #
+      # O projeto tem um rust-toolchain.toml que fixa a versao que ele quer.
+      # Numa tentativa anterior eu mandei usar a estavel e o alvo foi instalado
+      # na versao errada. Rodando dentro da pasta do projeto, o rustup respeita
+      # o arquivo dele sozinho.
+      - name: Instalar o alvo de iPhone
         run: |
-          rustup update stable
-          rustup default stable
+          rustup show
           rustup target add aarch64-apple-ios
+          rustup target list --installed
 
-      # O nome interno do projeto a gente nao sabe de cor. Em vez de chutar,
-      # perguntamos pro proprio Xcode e usamos o primeiro que ele listar.
       - name: Descobrir o nome do projeto
         id: achar
         run: |
           set -e
           PROJETO=$(ls -d *.xcodeproj | head -1)
-          echo "projeto: $PROJETO"
-          xcodebuild -list -project "$PROJETO"
           ESQUEMA=$(xcodebuild -list -project "$PROJETO" -json \
             | python3 -c "import json,sys; print(json.load(sys.stdin)['project']['schemes'][0])")
-          echo "esquema: $ESQUEMA"
+          echo "projeto: $PROJETO / esquema: $ESQUEMA"
           echo "projeto=$PROJETO" >> $GITHUB_OUTPUT
           echo "esquema=$ESQUEMA" >> $GITHUB_OUTPUT
 
-      # Sem assinatura: assinar exige conta paga da Apple, e neste passo a
-      # gente so quer saber se o aplicativo se constroi.
-      - name: Compilar para iPhone
+      # A CHAVE DA APPLE, no lugar onde as ferramentas dela procuram.
+      #
+      # Tanto o xcodebuild quanto o enviador olham em ~/.appstoreconnect, e o
+      # nome do arquivo precisa ser AuthKey_<id da chave>.p8 — e assim que eles
+      # sabem qual chave e qual.
+      - name: Preparar a chave da Apple
+        env:
+          P8: ${{ secrets.APPLE_P8 }}
+          ID_CHAVE: ${{ secrets.APPLE_KEY_ID }}
+        run: |
+          set -e
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s' "$P8" > ~/.appstoreconnect/private_keys/AuthKey_$ID_CHAVE.p8
+          # Nunca mostrar o conteudo: so conferir que chegou inteiro.
+          wc -c < ~/.appstoreconnect/private_keys/AuthKey_$ID_CHAVE.p8
+
+      # ASSINATURA AUTOMATICA.
+      #
+      # Com a chave, o proprio Xcode cria no painel da Apple o certificado e o
+      # perfil que faltarem (-allowProvisioningUpdates). Sem isso seria preciso
+      # gerar tudo a mao e guardar mais segredos aqui.
+      #
+      # O NUMERO DA COMPILACAO vem do contador do GitHub. O TestFlight recusa
+      # um numero repetido, e o do projeto e fixo: sem isto, o segundo envio
+      # falharia com "ja existe uma compilacao com esse numero".
+      - name: Compilar e assinar
+        env:
+          ID_CHAVE: ${{ secrets.APPLE_KEY_ID }}
+          ID_EMISSOR: ${{ secrets.APPLE_ISSUER_ID }}
         run: |
           set -o pipefail
           xcodebuild \
@@ -65,27 +105,75 @@ jobs:
             -scheme "${{ steps.achar.outputs.esquema }}" \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath construcao \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            build
+            -archivePath construcao/app.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$ID_CHAVE.p8 \
+            -authenticationKeyID "$ID_CHAVE" \
+            -authenticationKeyIssuerID "$ID_EMISSOR" \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM=$TIME \
+            PRODUCT_BUNDLE_IDENTIFIER=$BUNDLE \
+            MARKETING_VERSION=1.0 \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            archive
 
-      # Um .ipa e so uma pasta "Payload" com o aplicativo dentro, compactada.
+      # AS INSTRUCOES DE EMPACOTAMENTO.
+      #
+      # O nome do metodo mudou de "app-store" pra "app-store-connect" nas
+      # versoes novas do Xcode. Em vez de adivinhar qual Mac o GitHub vai dar
+      # hoje, tentamos o novo e, se ele recusar, o antigo.
       - name: Empacotar o .ipa
+        env:
+          ID_CHAVE: ${{ secrets.APPLE_KEY_ID }}
+          ID_EMISSOR: ${{ secrets.APPLE_ISSUER_ID }}
         run: |
           set -e
-          APLICATIVO=$(find construcao/Build/Products -maxdepth 3 -name '*.app' | head -1)
-          echo "aplicativo encontrado: $APLICATIVO"
-          mkdir -p saida/Payload
-          cp -R "$APLICATIVO" saida/Payload/
-          cd saida
-          zip -qry ruffle-iphone-sem-assinatura.ipa Payload
-          ls -lh *.ipa
+          empacotar () {
+            cat > instrucoes.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>$1</string>
+            <key>teamID</key><string>$TIME</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><false/>
+            <key>destination</key><string>export</string>
+          </dict>
+          </plist>
+          PLIST
+            xcodebuild -exportArchive \
+              -archivePath construcao/app.xcarchive \
+              -exportOptionsPlist instrucoes.plist \
+              -exportPath saida \
+              -allowProvisioningUpdates \
+              -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_$ID_CHAVE.p8 \
+              -authenticationKeyID "$ID_CHAVE" \
+              -authenticationKeyIssuerID "$ID_EMISSOR"
+          }
+          empacotar app-store-connect || empacotar app-store
+          ls -lh saida/*.ipa
 
-      - name: Guardar o resultado pra baixar
+      - name: Mandar pro TestFlight
+        env:
+          ID_CHAVE: ${{ secrets.APPLE_KEY_ID }}
+          ID_EMISSOR: ${{ secrets.APPLE_ISSUER_ID }}
+        run: |
+          set -e
+          ARQUIVO=$(ls saida/*.ipa | head -1)
+          echo "enviando: $ARQUIVO"
+          xcrun altool --upload-app -f "$ARQUIVO" -t ios \
+            --apiKey "$ID_CHAVE" --apiIssuer "$ID_EMISSOR"
+          echo ""
+          echo "Enviado. O TestFlight ainda processa o arquivo por alguns"
+          echo "minutos antes de liberar pro testador."
+
+      # Guardado tambem aqui: se o envio falhar por algo do lado da Apple, o
+      # arquivo pronto fica pra baixar, e nao se perde a compilacao inteira.
+      - name: Guardar o .ipa pra baixar
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ruffle-iphone
+          name: app-de-iphone
           path: saida/*.ipa
-          if-no-files-found: error
+          if-no-files-found: warn
