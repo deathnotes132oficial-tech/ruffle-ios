@@ -142,6 +142,8 @@ jobs:
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             IPHONEOS_DEPLOYMENT_TARGET=15.0 \
             TARGETED_DEVICE_FAMILY=1 \
+            ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon \
+            INFOPLIST_KEY_CFBundleIconName=AppIcon \
             INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
             INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
             INFOPLIST_KEY_ITSAppUsesNonExemptEncryption=NO \
@@ -159,6 +161,29 @@ jobs:
       # erro que sobrava no fim era o da SEGUNDA tentativa, e a causa de
       # verdade (permissao da chave) ficava enterrada na primeira. Uma
       # tentativa so, e o erro que aparece e o que importa.
+      # CONFERIR O ICONE ANTES DE ENVIAR.
+      #
+      # O envio ja foi recusado duas vezes por falta de icone (erros 90713 e
+      # 90022), e cada tentativa custa a compilacao inteira do Rust. Aqui a
+      # resposta aparece em segundos: se o nome do icone nao estiver no
+      # aplicativo, ou se o catalogo de imagens nao tiver sido compilado, a
+      # compilacao para AQUI, com a causa na tela — em vez de morrer no fim.
+      #
+      # Assets.car e o catalogo de imagens ja compilado. E dentro dele que o
+      # icone de 120x120 que a Apple exige e gerado, a partir do de 1024.
+      - name: Conferir o icone
+        run: |
+          set -e
+          APP=$(find construcao/app.xcarchive/Products/Applications -maxdepth 1 -name '*.app' | head -1)
+          echo "aplicativo: $APP"
+          echo "--- nome do icone declarado:"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP/Info.plist" \
+            || { echo "FALTA o CFBundleIconName no aplicativo."; exit 1; }
+          echo "--- catalogo de imagens e icones soltos:"
+          ls -la "$APP" | grep -i "assets.car\|appicon" \
+            || { echo "O catalogo de imagens NAO foi compilado no aplicativo."; exit 1; }
+
+
       - name: Assinar e empacotar o .ipa
         env:
           ID_CHAVE: ${{ secrets.APPLE_KEY_ID }}
