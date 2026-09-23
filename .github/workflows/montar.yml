@@ -85,12 +85,22 @@ jobs:
           # Nunca mostrar o conteudo: so conferir que chegou inteiro.
           wc -c < ~/.appstoreconnect/private_keys/AuthKey_$ID_CHAVE.p8
 
-      # ASSINATURA AUTOMATICA.
+      # ASSINATURA AUTOMATICA, DE DISTRIBUICAO.
       #
       # Com a chave, o proprio Xcode cria no painel da Apple o certificado e o
       # perfil que faltarem (-allowProvisioningUpdates). Sem isso seria preciso
       # gerar tudo a mao e guardar mais segredos aqui.
       #
+      #
+      # CODE_SIGN_IDENTITY="Apple Distribution" NAO E DETALHE.
+      # Sem essa linha o Xcode assume que o build e de DESENVOLVIMENTO e
+      # tenta criar um perfil desse tipo. Perfil de desenvolvimento serve
+      # pra instalar em aparelhos conhecidos, entao a Apple exige pelo menos
+      # um aparelho cadastrado — dai o erro "your team has no devices from
+      # which to generate a provisioning profile". Nao temos aparelho
+      # cadastrado, e nao precisamos: quem instala e o TestFlight, que usa
+      # perfil de DISTRIBUICAO. Dizendo isso aqui, o Xcode cria o perfil
+      # certo sozinho, sem aparelho nenhum.
       # O NUMERO DA COMPILACAO vem do contador do GitHub. O TestFlight recusa
       # um numero repetido, e o do projeto e fixo: sem isto, o segundo envio
       # falharia com "ja existe uma compilacao com esse numero".
@@ -133,6 +143,7 @@ jobs:
             -authenticationKeyID "$ID_CHAVE" \
             -authenticationKeyIssuerID "$ID_EMISSOR" \
             CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM=$TIME \
             PRODUCT_BUNDLE_IDENTIFIER=$BUNDLE \
             MARKETING_VERSION=1.0 \
