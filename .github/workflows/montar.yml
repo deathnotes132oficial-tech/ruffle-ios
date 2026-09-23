@@ -161,28 +161,53 @@ jobs:
       # erro que sobrava no fim era o da SEGUNDA tentativa, e a causa de
       # verdade (permissao da chave) ficava enterrada na primeira. Uma
       # tentativa so, e o erro que aparece e o que importa.
-      # CONFERIR O ICONE ANTES DE ENVIAR.
+      # CONFERIR O APLICATIVO ANTES DE ENVIAR.
       #
-      # O envio ja foi recusado duas vezes por falta de icone (erros 90713 e
-      # 90022), e cada tentativa custa a compilacao inteira do Rust. Aqui a
-      # resposta aparece em segundos: se o nome do icone nao estiver no
-      # aplicativo, ou se o catalogo de imagens nao tiver sido compilado, a
-      # compilacao para AQUI, com a causa na tela — em vez de morrer no fim.
+      # O envio ja foi recusado por falta de icone (erros 90713 e 90022), e
+      # cada tentativa custa a compilacao inteira do Rust. Aqui a resposta
+      # aparece em segundos.
+      #
+      # ESTE PASSO CONTA TUDO ANTES DE PARAR. A versao anterior parava na
+      # primeira falta, e cada rodada revelava so um problema por vez. Agora
+      # ele junta as faltas e so falha no fim, com a lista inteira.
       #
       # Assets.car e o catalogo de imagens ja compilado. E dentro dele que o
       # icone de 120x120 que a Apple exige e gerado, a partir do de 1024.
-      - name: Conferir o icone
+      #
+      # A tela deitada tambem e conferida aqui: no iPhone vale a chave com o
+      # sufixo ~iphone, quando ela existe; so na falta dela vale a geral. Ver
+      # as duas evita descobrir a tela em pe depois, no aparelho do testador.
+      - name: Conferir o aplicativo
         run: |
-          set -e
           APP=$(find construcao/app.xcarchive/Products/Applications -maxdepth 1 -name '*.app' | head -1)
           echo "aplicativo: $APP"
+          FALTOU=0
+
           echo "--- nome do icone declarado:"
           /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$APP/Info.plist" \
-            || { echo "FALTA o CFBundleIconName no aplicativo."; exit 1; }
+            || { echo "FALTA o CFBundleIconName no aplicativo."; FALTOU=1; }
+
           echo "--- catalogo de imagens e icones soltos:"
           ls -la "$APP" | grep -i "assets.car\|appicon" \
-            || { echo "O catalogo de imagens NAO foi compilado no aplicativo."; exit 1; }
+            || { echo "O catalogo de imagens NAO foi compilado."; FALTOU=1; }
 
+          echo "--- icones que o catalogo gerou:"
+          if [ -f "$APP/Assets.car" ]; then
+            xcrun assetutil --info "$APP/Assets.car" \
+              | grep -i "AppIcon\|SizeOnDisk" | head -40 || true
+          fi
+
+          echo "--- orientacoes (a do iPhone manda, quando existe):"
+          /usr/libexec/PlistBuddy -c "Print :UISupportedInterfaceOrientations~iphone" \
+            "$APP/Info.plist" || echo "(sem a chave do iPhone — vale a geral)"
+          /usr/libexec/PlistBuddy -c "Print :UISupportedInterfaceOrientations" \
+            "$APP/Info.plist" || echo "(sem a chave geral)"
+
+          echo "--- tela de abertura:"
+          /usr/libexec/PlistBuddy -c "Print :UILaunchStoryboardName" \
+            "$APP/Info.plist" || echo "(sem tela de abertura declarada)"
+
+          [ "$FALTOU" = "0" ] || { echo ""; echo "Parando: falta acima."; exit 1; }
 
       - name: Assinar e empacotar o .ipa
         env:
