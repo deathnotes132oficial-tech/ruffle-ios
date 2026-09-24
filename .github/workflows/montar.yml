@@ -142,6 +142,7 @@ jobs:
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             IPHONEOS_DEPLOYMENT_TARGET=15.0 \
             TARGETED_DEVICE_FAMILY=1 \
+            INFOPLIST_KEY_CFBundleDisplayName="CF Client" \
             ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon \
             INFOPLIST_KEY_CFBundleIconName=AppIcon \
             INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
