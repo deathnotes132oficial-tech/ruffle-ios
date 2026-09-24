@@ -450,9 +450,22 @@ impl PlayerController {
                     .unwrap_or(Duration::MAX),
             )
             .with_quality(player_options.quality.unwrap_or(StageQuality::High))
+            // FORCAR TAMBEM O ALINHAMENTO, pelo mesmo motivo da escala logo
+            // abaixo: o DDTank manda encostar o palco num canto, e o Ruffle
+            // obedece.
+            //
+            // O jogo e 1000x600 e a tela deitada do iPhone e mais larga nessa
+            // proporcao, entao sobra faixa preta de qualquer jeito. O que se
+            // escolhe e ONDE ela fica: encostado, toda a sobra vai pra um lado
+            // so — foi o que o testador viu, o jogo colado na esquerda com uma
+            // tarja preta a direita. Centralizado, a sobra se divide nos dois
+            // lados e o jogo fica no meio.
+            //
+            // O padrao do alinhamento no Ruffle ja e o centro; o que faltava
+            // era dizer que ele vale mais que o pedido do jogo.
             .with_align(
                 player_options.align.unwrap_or_default(),
-                player_options.force_align.unwrap_or_default(),
+                player_options.force_align.unwrap_or(true),
             )
             // FORCAR a escala: o DDTank manda o palco nao redimensionar
             // (scaleMode = NoScale) logo no comeco. Sem forcar, ele aparece em
