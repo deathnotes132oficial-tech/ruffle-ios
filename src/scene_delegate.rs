@@ -2,7 +2,7 @@ use std::cell::Cell;
 
 use objc2::rc::{Allocated, Retained};
 use objc2::{define_class, msg_send, DefinedClass as _, MainThreadOnly, Message};
-use objc2_foundation::{NSObjectProtocol, NSProcessInfo, NSSet, NSURL};
+use objc2_foundation::{MainThreadMarker, NSArray, NSObjectProtocol, NSProcessInfo, NSSet, NSURL};
 use objc2_ui_kit::{
     UINavigationController, UIOpenURLContext, UIResponder, UIScene, UISceneConnectionOptions,
     UISceneDelegate, UISceneSession, UIWindow, UIWindowScene, UIWindowSceneDelegate,
@@ -11,6 +11,7 @@ use ruffle_frontend_utils::content::{ContentDescriptor, PlayingContent};
 use ruffle_frontend_utils::player_options::PlayerOptions;
 use url::Url;
 
+use crate::tela_de_entrada::TelaDeEntrada;
 use crate::{storage, PlayerController};
 
 pub struct Ivars {
@@ -18,6 +19,8 @@ pub struct Ivars {
     /// Pra so abrir o jogo de teste uma vez, e nao a cada vez que o
     /// aplicativo volta pra frente.
     ja_abriu_de_teste: Cell<bool>,
+    /// Idem pra tela de entrada: ela entra uma vez, na primeira abertura.
+    ja_abriu_entrada: Cell<bool>,
 }
 
 define_class!(
@@ -34,6 +37,7 @@ define_class!(
             let this = this.set_ivars(Ivars {
                 window: Cell::new(None),
                 ja_abriu_de_teste: Cell::new(false),
+                ja_abriu_entrada: Cell::new(false),
             });
             unsafe { msg_send![super(this), init] }
         }
@@ -61,6 +65,28 @@ define_class!(
         #[unsafe(method(sceneDidBecomeActive:))]
         fn sceneDidBecomeActive(&self, scene: &UIScene) {
             tracing::info!("sceneDidBecomeActive:");
+
+            // A TELA DE ENTRADA E A PRIMEIRA COISA DO APLICATIVO.
+            //
+            // O Ruffle original abre numa biblioteca de arquivos .swf, que pro
+            // nosso jogador nao significa nada: ele nunca vai ter um arquivo
+            // desses no iPhone. No lugar dela entra a pagina de login do site
+            // — a mesma do navegador e do Android.
+            //
+            // setViewControllers, e nao push: assim a biblioteca some do
+            // caminho de volta. Quem sair do jogo cai na tela de entrada, que
+            // e onde faz sentido cair.
+            if !self.ivars().ja_abriu_entrada.get() {
+                self.ivars().ja_abriu_entrada.set(true);
+
+                // Com --jogo o aplicativo ja abre tocando; nao ha o que logar.
+                if endereco_de_teste().is_none() {
+                    let nav = get_navigation_controller(scene);
+                    let tela = TelaDeEntrada::new(scene.mtm());
+                    let so_ela = NSArray::from_retained_slice(&[Retained::into_super(tela)]);
+                    nav.setViewControllers_animated(&so_ela, false);
+                }
+            }
 
             // ENTRADA DE TESTE: --jogo <endereco>
             //
@@ -226,6 +252,21 @@ fn endereco_de_teste() -> Option<String> {
 }
 
 fn tocar_endereco(scene: &UIScene, texto: &str) -> Option<()> {
+    let nav = get_navigation_controller(scene);
+    tocar_endereco_no_nav(&nav, scene.mtm(), texto)
+}
+
+/// O MESMO, PARA QUEM JA TEM O CONTROLADOR DE NAVEGACAO NA MAO.
+///
+/// A tela de entrada e um controlador dentro da pilha, e de la se chega no
+/// navigationController direto — nao ha cena nenhuma pra consultar. Separando
+/// assim, os dois caminhos (o link de fora e o botao da pagina) abrem o jogo
+/// exatamente do mesmo jeito, em vez de duas copias que divergem com o tempo.
+pub(crate) fn tocar_endereco_no_nav(
+    nav: &UINavigationController,
+    mtm: MainThreadMarker,
+    texto: &str,
+) -> Option<()> {
     let endereco = Url::parse(texto).ok()?;
 
     let alvo = match endereco.scheme() {
@@ -251,7 +292,6 @@ fn tocar_endereco(scene: &UIScene, texto: &str) -> Option<()> {
 
     tracing::info!("tocando da internet: {alvo} ({} parametros)", parametros.len());
 
-    let nav = get_navigation_controller(scene);
     nav.popToRootViewControllerAnimated(false);
 
     // O campo la dentro se chama "parameters"; a variavel daqui esta em
@@ -265,7 +305,7 @@ fn tocar_endereco(scene: &UIScene, texto: &str) -> Option<()> {
     // que e o endereco mais o que o Ruffle precisa saber sobre ele. Pra coisa
     // que mora na internet, a propria biblioteca oferece o new_remote.
     let controller = PlayerController::new(
-        scene.mtm(),
+        mtm,
         PlayingContent::DirectFile(ContentDescriptor::new_remote(alvo)),
         opcoes,
     );
