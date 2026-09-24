@@ -66,6 +66,7 @@ define_class!(
         #[unsafe(method(sceneDidBecomeActive:))]
         fn sceneDidBecomeActive(&self, scene: &UIScene) {
             tracing::info!("sceneDidBecomeActive:");
+            registro::marcar_frente();
 
             // A TELA DE ENTRADA E A PRIMEIRA COISA DO APLICATIVO.
             //
@@ -135,6 +136,13 @@ define_class!(
         #[unsafe(method(sceneDidEnterBackground:))]
         fn sceneDidEnterBackground(&self, scene: &UIScene) {
             tracing::info!("sceneDidEnterBackground:");
+
+            // A MARCA DE SAIDA LIMPA.
+            //
+            // Toda saida normal passa por aqui, inclusive fechar pelo seletor
+            // de aplicativos. Se a sessao terminar SEM esta linha no fim, o
+            // aplicativo morreu no meio — e e assim que o registro sabe.
+            registro::marcar_fundo();
 
             // Flush when going to the background.
             let nav = get_navigation_controller(scene);
