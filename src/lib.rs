@@ -12,6 +12,7 @@ mod edit_controller;
 mod library_controller;
 mod player_controller;
 mod player_view;
+mod registro;
 mod scene_delegate;
 mod tela_de_entrada;
 mod storage;
@@ -42,6 +43,15 @@ pub fn init_logging() {
 }
 
 pub fn launch(app_class: Option<&AnyClass>, delegate_class: Option<&AnyClass>) {
+    // ANTES DE QUALQUER COISA: passar a guardar o motivo de uma quebra.
+    //
+    // Se o Ruffle quebrar la na frente, a mensagem dele e a unica pista que
+    // existe — e sem isto ela morre junto com o aplicativo. Instalado aqui,
+    // no comeco, porque quebra que acontece durante a partida ja estaria
+    // fora do alcance se instalassemos depois.
+    registro::instalar();
+    registro::anotar("aplicativo aberto");
+
     // Set inside Info.plist
     let _ = scene_delegate::SceneDelegate::class();
 
