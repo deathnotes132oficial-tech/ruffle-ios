@@ -26,6 +26,10 @@ pub struct Ivars {
     player: OnceCell<Arc<Mutex<Player>>>,
     timer: OnceCell<Retained<NSTimer>>,
     last_frame_time: Cell<Option<Instant>>,
+    /// Quando a memoria foi medida pela ultima vez. Medir a cada quadro
+    /// encheria o registro de milhares de linhas iguais e ainda escreveria em
+    /// disco 60 vezes por segundo.
+    ultima_medida: Cell<Option<Instant>>,
 }
 
 impl fmt::Debug for Ivars {
@@ -355,6 +359,23 @@ impl PlayerView {
         let dt = new_time.duration_since(last_frame_time).as_nanos();
         self.ivars().last_frame_time.set(Some(new_time));
         tracing::trace!("timer fire: {:?}", dt as f64 / 1_000_000.0);
+
+        // A MEMORIA, DE DOIS EM DOIS SEGUNDOS.
+        //
+        // Este e o unico lugar do programa que roda o tempo todo enquanto
+        // o jogo esta em pe. Se o aplicativo for morto por memoria, as
+        // ultimas linhas do registro vao mostrar a queda ate perto de
+        // zero; se morrer de outra coisa, vao mostrar folga — e nos dois
+        // casos a resposta esta la, sem precisar de mais um teste.
+        let agora = Instant::now();
+        let medir = match self.ivars().ultima_medida.get() {
+            None => true,
+            Some(antes) => agora.duration_since(antes).as_secs() >= 2,
+        };
+        if medir {
+            self.ivars().ultima_medida.set(Some(agora));
+            crate::registro::anotar_memoria();
+        }
 
         let mut player_lock = self.player_lock();
 
