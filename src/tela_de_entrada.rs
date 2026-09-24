@@ -116,14 +116,15 @@ define_class!(
             }
             vista.addSubview(&navegador);
 
-            // SE O APLICATIVO QUEBROU DA ULTIMA VEZ, ISSO VEM PRIMEIRO.
+            // SE A SESSAO PASSADA MORREU NO MEIO, ISSO VEM PRIMEIRO.
             //
-            // So quando ha quebra de verdade — as anotacoes de passagem
-            // ("aplicativo aberto") ficam guardadas mas nao interrompem
-            // ninguem. Quem so quer jogar nunca ve esta tela.
-            match registro::ler() {
-                Some(texto) if texto.contains(registro::MARCA_DE_QUEBRA) => {
-                    tracing::info!("tela de entrada: mostrando o registro da quebra");
+            // Quem fechou o aplicativo normalmente nunca ve esta tela: sair
+            // passa pelo fundo, e o registro sabe disso. So aparece quando a
+            // sessao terminou sem aviso — que e exatamente o caso que a gente
+            // esta cacando.
+            match registro::anterior() {
+                Some(texto) if registro::anterior_morreu() => {
+                    tracing::info!("tela de entrada: a sessao passada morreu, mostrando");
                     mostrar_o_registro(&navegador, &texto);
                 }
                 _ => abrir_a_pagina(&navegador),
@@ -181,7 +182,7 @@ define_class!(
             // partida — que nao e.
             if texto.starts_with(CONTINUAR) {
                 decisao.call((NAO_NAVEGUE,));
-                registro::limpar();
+                registro::limpar_anterior();
                 abrir_a_pagina(&self.ivars().navegador);
                 return;
             }
@@ -247,7 +248,7 @@ fn mostrar_o_registro(navegador: &WKWebView, texto: &str) {
               background: #C8102E; color: #fff; font-size: 16px; font-weight: 700;
               letter-spacing: .12em; padding: 15px 14px; border-radius: 14px; }}
 </style></head><body>
-<h1>O APLICATIVO FECHOU DA ULTIMA VEZ</h1>
+<h1>O APLICATIVO FECHOU SOZINHO DA ULTIMA VEZ</h1>
 <p class="sub">Tire um print desta tela e mande pro suporte. Depois toque em
 continuar para entrar no jogo normalmente.</p>
 <pre id="oque">{corpo}</pre>
