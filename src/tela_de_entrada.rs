@@ -22,22 +22,44 @@
 //!
 //! Fora do aplicativo o mesmo botao continua servindo: no Safari, ele faz o
 //! iPhone chamar o aplicativo. Um botao so, dois caminhos.
+//!
+//! POR QUE O WKWebView E DECLARADO AQUI, NA MAO
+//! --------------------------------------------
+//! A biblioteca pronta (objc2-web-kit) declara o WKWebView com
+//! `#[cfg(target_os = "macos")]`: no iPhone a classe simplesmente nao existe
+//! do lado do Rust, e nenhuma opcao do Cargo faz ela aparecer — a versao
+//! 0.3.2 e a ultima publicada, entao nao ha pra onde atualizar.
+//!
+//! A classe existe no aparelho: e a mesma do Safari, e o iOS traz ela desde
+//! sempre. So falta a traducao pro Rust. Como usamos tres metodos dela,
+//! escrever essa traducao e menor do que parece, e nos tira a dependencia
+//! inteira de cima.
 
+use block2::DynBlock;
 use objc2::rc::Retained;
-use objc2::runtime::ProtocolObject;
-use objc2::{define_class, msg_send, DefinedClass as _, MainThreadOnly};
+use objc2::runtime::{AnyObject, NSObject};
+use objc2::{define_class, extern_class, msg_send, DefinedClass as _, MainThreadOnly};
 use objc2_core_foundation::CGRect;
 use objc2_foundation::{MainThreadMarker, NSObjectProtocol, NSString, NSURLRequest, NSURL};
-use objc2_ui_kit::{UIColor, UIViewAutoresizing, UIViewController};
-use objc2_web_kit::{
-    WKNavigationAction, WKNavigationActionPolicy, WKNavigationDelegate, WKWebView,
-    WKWebViewConfiguration,
-};
+use objc2_ui_kit::{UIColor, UIResponder, UIView, UIViewAutoresizing, UIViewController};
 
 use crate::scene_delegate::tocar_endereco_no_nav;
 
 /// A pagina que o aplicativo abre.
 const ENDERECO_DA_ENTRADA: &str = "https://deathnotestore.com.br/jogar/";
+
+/// As duas respostas possiveis pro WebKit, quando ele pergunta se pode
+/// navegar. Sao os valores de WKNavigationActionPolicy, que e um NSInteger.
+const NAO_NAVEGUE: isize = 0;
+const PODE_NAVEGAR: isize = 1;
+
+extern_class!(
+    /// O navegador embutido do sistema — o mesmo motor do Safari.
+    #[unsafe(super(UIView, UIResponder, NSObject))]
+    #[thread_kind = MainThreadOnly]
+    #[derive(Debug, PartialEq, Eq, Hash)]
+    pub struct WKWebView;
+);
 
 pub struct Ivars {
     navegador: Retained<WKWebView>,
@@ -57,7 +79,10 @@ define_class!(
             let _: () = unsafe { msg_send![super(self), viewDidLoad] };
             tracing::info!("tela de entrada: viewDidLoad");
 
-            let vista = self.view().expect("o controlador sempre tem vista aqui");
+            let Some(vista) = self.view() else {
+                tracing::error!("tela de entrada: sem vista");
+                return;
+            };
 
             // Fundo escuro: enquanto a pagina nao pinta, o que aparece e isto,
             // e branco piscando antes de uma tela escura fica feio.
@@ -69,38 +94,38 @@ define_class!(
                 navegador.setAutoresizingMask(
                     UIViewAutoresizing::FlexibleWidth | UIViewAutoresizing::FlexibleHeight,
                 );
-                navegador.setNavigationDelegate(Some(ProtocolObject::from_ref(self)));
+                // Quem responde as perguntas do navegador somos nos.
+                let _: () = msg_send![&*navegador, setNavigationDelegate: &*self];
             }
             vista.addSubview(&navegador);
 
             abrir_a_pagina(&navegador);
         }
-    }
 
-    unsafe impl WKNavigationDelegate for TelaDeEntrada {
         // O WEBKIT PERGUNTA, E QUEM RESPONDE E O BLOCO.
         //
-        // Este metodo nao devolve a decisao: ele recebe um bloco e a decisao
+        // Este metodo nao devolve a decisao: ele recebe um bloco, e a decisao
         // e chamar esse bloco. Chamar UMA vez, sempre — se o caminho sair
         // daqui sem chamar, o WebKit fica esperando pra sempre e a pagina
         // trava sem dizer por que.
+        //
+        // O metodo e declarado solto, sem dizer que a classe segue o
+        // protocolo WKNavigationDelegate: no iPhone esse protocolo vem sem
+        // este metodo, porque a assinatura dele menciona o WKWebView que a
+        // biblioteca nao traz. Nao faz falta — o Objective-C pergunta ao
+        // objeto se ele atende o recado, e atende quem implementa.
         #[unsafe(method(webView:decidePolicyForNavigationAction:decisionHandler:))]
         fn decidir(
             &self,
-            _navegador: &WKWebView,
-            acao: &WKNavigationAction,
-            decisao: &block2::DynBlock<dyn Fn(WKNavigationActionPolicy)>,
+            _navegador: &AnyObject,
+            acao: &AnyObject,
+            decisao: &DynBlock<dyn Fn(isize)>,
         ) {
-            let endereco = unsafe { acao.request().URL() };
-            let texto = endereco
-                .as_ref()
-                .and_then(|u| unsafe { u.absoluteString() })
-                .map(|s| s.to_string())
-                .unwrap_or_default();
+            let texto = endereco_da_acao(acao).unwrap_or_default();
 
             if texto.starts_with("deathnote:") {
                 tracing::info!("tela de entrada: abrindo o jogo");
-                decisao.call((WKNavigationActionPolicy::Cancel,));
+                decisao.call((NAO_NAVEGUE,));
 
                 if let Some(nav) = self.navigationController() {
                     tocar_endereco_no_nav(&nav, self.mtm(), &texto);
@@ -110,34 +135,36 @@ define_class!(
                 return;
             }
 
-            decisao.call((WKNavigationActionPolicy::Allow,));
+            decisao.call((PODE_NAVEGAR,));
         }
     }
 );
 
 impl TelaDeEntrada {
     pub fn new(mtm: MainThreadMarker) -> Retained<Self> {
-        let config = unsafe { WKWebViewConfiguration::new(mtm) };
-        let navegador = unsafe {
-            WKWebView::initWithFrame_configuration(
-                WKWebView::alloc(mtm),
-                CGRect::ZERO,
-                &config,
-            )
-        };
+        // initWithFrame: e suficiente — o WKWebView monta sozinho a
+        // configuracao padrao, que e a que queremos.
+        let navegador: Retained<WKWebView> =
+            unsafe { msg_send![WKWebView::alloc(mtm), initWithFrame: CGRect::ZERO] };
 
         let this = Self::alloc(mtm).set_ivars(Ivars { navegador });
         unsafe { msg_send![super(this), init] }
     }
 }
 
+/// O endereco que o WebKit quer visitar, como texto.
+fn endereco_da_acao(acao: &AnyObject) -> Option<String> {
+    let pedido: Retained<NSURLRequest> = unsafe { msg_send![acao, request] };
+    let endereco = unsafe { pedido.URL() }?;
+    Some(unsafe { endereco.absoluteString() }?.to_string())
+}
+
 fn abrir_a_pagina(navegador: &WKWebView) {
-    let endereco = NSURL::URLWithString(&NSString::from_str(ENDERECO_DA_ENTRADA));
-    let Some(endereco) = endereco else {
+    let Some(endereco) = NSURL::URLWithString(&NSString::from_str(ENDERECO_DA_ENTRADA)) else {
         tracing::error!("endereco da entrada invalido: {ENDERECO_DA_ENTRADA}");
         return;
     };
     let pedido = unsafe { NSURLRequest::requestWithURL(&endereco) };
-    let _ = unsafe { navegador.loadRequest(&pedido) };
+    let _: () = unsafe { msg_send![navegador, loadRequest: &*pedido] };
     tracing::info!("tela de entrada: pedindo {ENDERECO_DA_ENTRADA}");
 }
