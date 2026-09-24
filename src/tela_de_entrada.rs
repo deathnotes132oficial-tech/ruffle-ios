@@ -114,6 +114,31 @@ define_class!(
             abrir_a_pagina(&navegador);
         }
 
+        // A BARRA DE CIMA SO APARECE QUANDO SERVE PRA ALGO.
+        //
+        // Na tela de entrada ela e uma faixa azul vazia — azul do Ruffle, em
+        // cima de uma tela escura que nao e do Ruffle. Nao ha pra onde voltar
+        // daqui: esta e a primeira tela.
+        //
+        // Ela volta ao sair: quando o jogo abre por cima, a barra e o caminho
+        // de volta pra ca. Por isso esconder e mostrar andam em par — esconder
+        // sem mostrar deixaria o jogador preso dentro do jogo.
+        #[unsafe(method(viewWillAppear:))]
+        fn view_will_appear(&self, animado: bool) {
+            let _: () = unsafe { msg_send![super(self), viewWillAppear: animado] };
+            if let Some(nav) = self.navigationController() {
+                unsafe { nav.setNavigationBarHidden_animated(true, animado) };
+            }
+        }
+
+        #[unsafe(method(viewWillDisappear:))]
+        fn view_will_disappear(&self, animado: bool) {
+            let _: () = unsafe { msg_send![super(self), viewWillDisappear: animado] };
+            if let Some(nav) = self.navigationController() {
+                unsafe { nav.setNavigationBarHidden_animated(false, animado) };
+            }
+        }
+
         // O WEBKIT PERGUNTA, E QUEM RESPONDE E O BLOCO.
         //
         // Este metodo nao devolve a decisao: ele recebe um bloco, e a decisao
