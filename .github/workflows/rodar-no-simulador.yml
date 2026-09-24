@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       swf:
-        description: "Endereco do jogo, com usuario e chave (em branco = um teste simples)"
+        description: "Endereco do jogo (em branco = abre na tela de entrada, que e o teste normal)"
         required: false
         default: ""
 
@@ -136,29 +136,35 @@ jobs:
           set +e
           ID="${{ steps.telefone.outputs.id }}"
           ENDERECO="${{ inputs.swf }}"
-          if [ -z "$ENDERECO" ]; then
-            ENDERECO="https://raw.githubusercontent.com/ruffle-rs/ruffle/master/tests/tests/swfs/avm2/hello_world/test.swf"
-          fi
-          # ABRIR JA COM O ENDERECO, em vez de entregar depois.
+          NOME="${{ steps.abrir.outputs.nome }}"
+
+          # SEM ENDERECO = O TESTE QUE INTERESSA.
           #
-          # Duas tentativas ensinaram por que:
-          #   - endereco "http://" o iPhone entrega ao Safari, sempre;
-          #   - endereco "deathnote://" vindo de fora faz ele perguntar
-          #     "abrir no Ruffle?", e maquina nenhuma responde essa pergunta.
+          # O aplicativo agora abre na tela de entrada, que e a pagina de
+          # login do site mostrada aqui dentro. Passar --jogo PULA essa tela,
+          # entao pra conferir se ela pinta o certo e nao passar nada.
           #
-          # Passando na abertura do aplicativo nao ha pergunta nem navegador.
-          # Pro jogador continua valendo o "deathnote://" do botao do site.
+          # O campo do endereco continua existindo pra quando a pergunta for
+          # outra ("este .swf toca?"), e ai vale o caminho antigo.
+          #
           # ABRIR COM O CONSOLE LIGADO.
           #
-          # O aplicativo vem morrendo por volta dos 40 segundos sem deixar
-          # recado no registro do sistema. Falta de recado ali e tipico de
-          # estouro do proprio programa: a mensagem sai pela saida de texto,
-          # que so aparece com o console ligado.
+          # Ja houve um caso de o aplicativo morrer por volta dos 40 segundos
+          # sem deixar recado no registro do sistema. Falta de recado ali e
+          # tipico de estouro do proprio programa: a mensagem sai pela saida
+          # de texto, que so aparece com o console ligado.
           #
           # Roda em segundo plano porque o console prende o terminal ate o
           # aplicativo fechar — e a gente precisa fotografar nesse meio tempo.
-          echo "abrindo com: $ENDERECO"
-          xcrun simctl launch --console-pty "$ID" "${{ steps.abrir.outputs.nome }}"             --jogo "$ENDERECO" > fotos/o-que-o-app-disse.txt 2>&1 &
+          if [ -z "$ENDERECO" ]; then
+            echo "abrindo SEM endereco: a tela de entrada deve aparecer"
+            xcrun simctl launch --console-pty "$ID" "$NOME" \
+              > fotos/o-que-o-app-disse.txt 2>&1 &
+          else
+            echo "abrindo com: $ENDERECO"
+            xcrun simctl launch --console-pty "$ID" "$NOME" --jogo "$ENDERECO" \
+              > fotos/o-que-o-app-disse.txt 2>&1 &
+          fi
           sleep 5
           xcrun simctl io "$ID" screenshot "fotos/1-abriu.png" || true
           exit 0
