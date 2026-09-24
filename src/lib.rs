@@ -49,8 +49,7 @@ pub fn launch(app_class: Option<&AnyClass>, delegate_class: Option<&AnyClass>) {
     // existe — e sem isto ela morre junto com o aplicativo. Instalado aqui,
     // no comeco, porque quebra que acontece durante a partida ja estaria
     // fora do alcance se instalassemos depois.
-    registro::instalar();
-    registro::anotar("aplicativo aberto");
+    registro::iniciar_sessao();
 
     // Set inside Info.plist
     let _ = scene_delegate::SceneDelegate::class();
