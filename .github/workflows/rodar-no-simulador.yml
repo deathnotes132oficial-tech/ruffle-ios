@@ -173,13 +173,39 @@ jobs:
 
       # Uma foto a cada 10 segundos, por dois minutos. O jogo demora, e uma
       # tela preta no segundo 10 nao quer dizer nada.
+      #
+      # E, JUNTO DE CADA FOTO, QUANTA MEMORIA O APLICATIVO ESTA USANDO.
+      #
+      # No iPhone o sistema MATA o aplicativo que passa do limite — algo entre
+      # 1 e 2 GB, conforme o aparelho. O testador relatou que o jogo fecha ao
+      # abrir certos paineis, e nao fecha parado: isso tem cara de memoria,
+      # porque cada painel carrega mais imagens.
+      #
+      # O simulador nao mata por memoria (roda no Mac, que tem de sobra), mas
+      # o NUMERO e o mesmo. Se ele subir passando de um giga durante o jogo,
+      # a causa esta achada sem precisar do aparelho de ninguem.
+      #
+      # RSS e a memoria de verdade ocupada, em kilobytes. O aplicativo do
+      # simulador roda como processo do proprio Mac, entao o ps daqui o ve.
       - name: Acompanhar por dois minutos
         run: |
+          memoria () {
+            ps -Ao rss=,comm= 2>/dev/null \
+              | grep -i "ruffle-ios" \
+              | grep -v grep \
+              | awk '{ soma += $1 } END { printf "%.0f", soma / 1024 }'
+          }
+
+          echo "segundo | memoria (MB)" | tee fotos/memoria.txt
           for i in $(seq -w 1 12); do
             sleep 10
             xcrun simctl io "${{ steps.telefone.outputs.id }}" screenshot "fotos/tela-$i.png" || true
-            echo "foto $i (segundo $((10#$i * 10)))"
+            MB=$(memoria)
+            [ -z "$MB" ] && MB="(o aplicativo nao esta mais rodando)"
+            echo "$((10#$i * 10))s | $MB" | tee -a fotos/memoria.txt
           done
+          echo ""
+          echo "LIMITE DE REFERENCIA: o iPhone costuma matar entre 1024 e 2048 MB."
           ls -lh fotos
           echo ""
           echo "=================== O QUE O APLICATIVO DISSE =================="
