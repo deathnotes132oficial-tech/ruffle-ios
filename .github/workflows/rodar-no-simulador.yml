@@ -80,7 +80,8 @@ jobs:
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
             INFOPLIST_KEY_CFBundleDisplayName="CF Client" \
-            INFOPLIST_KEY_UISupportedInterfaceOrientations="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
+            INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
+            INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
             build
 
       # USAR UM IPHONE QUE JA EXISTE, em vez de criar.
