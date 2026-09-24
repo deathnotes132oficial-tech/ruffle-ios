@@ -53,6 +53,18 @@ const ENDERECO_DA_ENTRADA: &str = "https://deathnotestore.com.br/jogar/";
 const NAO_NAVEGUE: isize = 0;
 const PODE_NAVEGAR: isize = 1;
 
+// CARREGAR A BIBLIOTECA DO WEBKIT.
+//
+// Sem esta linha o programa compila, abre, e MORRE na primeira vez que
+// procura a classe: "class WKWebView could not be found". A classe existe no
+// aparelho — o que faltava era mandar o ligador trazer a caixa onde ela mora.
+//
+// Quem fazia isso era a dependencia objc2-web-kit, que tivemos que remover
+// porque ela nao traz o WKWebView no iPhone. Ao tirar a dependencia, este
+// pedaco dela veio junto sem querer.
+#[link(name = "WebKit", kind = "framework")]
+extern "C" {}
+
 extern_class!(
     /// O navegador embutido do sistema — o mesmo motor do Safari.
     #[unsafe(super(UIView, UIResponder, NSObject))]
