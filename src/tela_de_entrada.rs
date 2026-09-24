@@ -43,10 +43,15 @@ use objc2_core_foundation::CGRect;
 use objc2_foundation::{MainThreadMarker, NSObjectProtocol, NSString, NSURLRequest, NSURL};
 use objc2_ui_kit::{UIColor, UIResponder, UIView, UIViewAutoresizing, UIViewController};
 
+use crate::registro;
 use crate::scene_delegate::tocar_endereco_no_nav;
 
 /// A pagina que o aplicativo abre.
 const ENDERECO_DA_ENTRADA: &str = "https://deathnotestore.com.br/jogar/";
+
+/// O toque em "CONTINUAR" na tela do registro. Nao e endereco de internet:
+/// e um recado da pagina pra ca, pelo mesmo caminho do botao do jogo.
+const CONTINUAR: &str = "deathnote://continuar";
 
 /// As duas respostas possiveis pro WebKit, quando ele pergunta se pode
 /// navegar. Sao os valores de WKNavigationActionPolicy, que e um NSInteger.
@@ -111,7 +116,18 @@ define_class!(
             }
             vista.addSubview(&navegador);
 
-            abrir_a_pagina(&navegador);
+            // SE O APLICATIVO QUEBROU DA ULTIMA VEZ, ISSO VEM PRIMEIRO.
+            //
+            // So quando ha quebra de verdade — as anotacoes de passagem
+            // ("aplicativo aberto") ficam guardadas mas nao interrompem
+            // ninguem. Quem so quer jogar nunca ve esta tela.
+            match registro::ler() {
+                Some(texto) if texto.contains(registro::MARCA_DE_QUEBRA) => {
+                    tracing::info!("tela de entrada: mostrando o registro da quebra");
+                    mostrar_o_registro(&navegador, &texto);
+                }
+                _ => abrir_a_pagina(&navegador),
+            }
         }
 
         // A BARRA DE CIMA SO APARECE QUANDO SERVE PRA ALGO.
@@ -160,6 +176,16 @@ define_class!(
         ) {
             let texto = endereco_da_acao(acao).unwrap_or_default();
 
+            // O "continuar" vem ANTES do teste geral de "deathnote:", senao
+            // ele cairia no caminho do jogo e seria lido como endereco de
+            // partida — que nao e.
+            if texto.starts_with(CONTINUAR) {
+                decisao.call((NAO_NAVEGUE,));
+                registro::limpar();
+                abrir_a_pagina(&self.ivars().navegador);
+                return;
+            }
+
             if texto.starts_with("deathnote:") {
                 tracing::info!("tela de entrada: abrindo o jogo");
                 decisao.call((NAO_NAVEGUE,));
@@ -194,6 +220,61 @@ fn endereco_da_acao(acao: &AnyObject) -> Option<String> {
     let pedido: Retained<NSURLRequest> = unsafe { msg_send![acao, request] };
     let endereco = unsafe { pedido.URL() }?;
     Some(unsafe { endereco.absoluteString() }?.to_string())
+}
+
+/// A TELA DO REGISTRO.
+///
+/// E uma pagina montada aqui mesmo, sem sair do aparelho: nada e enviado a
+/// lugar nenhum. O jogador ve, tira um print se quiser, e toca em CONTINUAR —
+/// que apaga o registro e leva pra tela de entrada de sempre.
+fn mostrar_o_registro(navegador: &WKWebView, texto: &str) {
+    let corpo = escapar(texto);
+    let pagina = format!(
+        r#"<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  :root {{ color-scheme: dark; }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin: 0; padding: 18px; background: #0B0A0D; color: #ECE5D8;
+         font-family: system-ui, -apple-system, sans-serif; }}
+  h1 {{ font-size: 17px; margin: 0 0 4px; color: #F0616D; }}
+  p.sub {{ font-size: 13px; color: #787284; margin: 0 0 14px; line-height: 1.5; }}
+  pre {{ background: #16141B; border: 1px solid #2A2632; border-radius: 12px;
+         padding: 12px; font-size: 11px; line-height: 1.6; color: #CBD5E1;
+         white-space: pre-wrap; word-break: break-word; margin: 0 0 16px; }}
+  a.seguir {{ display: block; text-align: center; text-decoration: none;
+              background: #C8102E; color: #fff; font-size: 16px; font-weight: 700;
+              letter-spacing: .12em; padding: 15px 14px; border-radius: 14px; }}
+</style></head><body>
+<h1>O APLICATIVO FECHOU DA ULTIMA VEZ</h1>
+<p class="sub">Tire um print desta tela e mande pro suporte. Depois toque em
+continuar para entrar no jogo normalmente.</p>
+<pre id="oque">{corpo}</pre>
+<a class="seguir" href="{CONTINUAR}">CONTINUAR</a>
+<script>
+  // Os horarios estao guardados em segundos desde 1970, que e o formato que
+  // nao depende de fuso nem de idioma. Aqui viram data legivel.
+  var alvo = document.getElementById("oque");
+  alvo.textContent = alvo.textContent.replace(/^\[(\d+)\]/gm, function (_, s) {{
+    return "[" + new Date(parseInt(s, 10) * 1000).toLocaleString("pt-BR") + "]";
+  }});
+</script>
+</body></html>"#
+    );
+
+    let vazio: Option<&NSURL> = None;
+    let _: () = unsafe {
+        msg_send![navegador, loadHTMLString: &*NSString::from_str(&pagina), baseURL: vazio]
+    };
+}
+
+/// Impede que o conteudo do registro seja lido como marcacao da pagina.
+fn escapar(texto: &str) -> String {
+    texto
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 fn abrir_a_pagina(navegador: &WKWebView) {
