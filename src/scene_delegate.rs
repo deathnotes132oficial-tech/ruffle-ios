@@ -11,6 +11,7 @@ use ruffle_frontend_utils::content::{ContentDescriptor, PlayingContent};
 use ruffle_frontend_utils::player_options::PlayerOptions;
 use url::Url;
 
+use crate::registro;
 use crate::tela_de_entrada::TelaDeEntrada;
 use crate::{storage, PlayerController};
 
@@ -291,6 +292,10 @@ pub(crate) fn tocar_endereco_no_nav(
         .collect();
 
     tracing::info!("tocando da internet: {alvo} ({} parametros)", parametros.len());
+
+    // Marco de passagem: se o aplicativo quebrar depois disto, o registro
+    // mostra que ele ja tinha entrado no jogo — e nao morrido antes.
+    registro::anotar(&format!("abrindo o jogo ({} parametros)", parametros.len()));
 
     nav.popToRootViewControllerAnimated(false);
 
