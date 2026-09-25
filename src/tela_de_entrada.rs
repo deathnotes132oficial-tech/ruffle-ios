@@ -41,7 +41,7 @@ use objc2::runtime::{AnyObject, NSObject};
 use objc2::{define_class, extern_class, msg_send, DefinedClass as _, MainThreadOnly};
 use objc2_core_foundation::CGRect;
 use objc2_foundation::{MainThreadMarker, NSObjectProtocol, NSString, NSURLRequest, NSURL};
-use objc2_ui_kit::{UIColor, UIResponder, UIView, UIViewAutoresizing, UIViewController};
+use objc2_ui_kit::{UIColor, UIPasteboard, UIResponder, UIView, UIViewAutoresizing, UIViewController};
 
 use crate::registro;
 use crate::scene_delegate::tocar_endereco_no_nav;
@@ -49,9 +49,10 @@ use crate::scene_delegate::tocar_endereco_no_nav;
 /// A pagina que o aplicativo abre.
 const ENDERECO_DA_ENTRADA: &str = "https://deathnotestore.com.br/jogar/";
 
-/// O toque em "CONTINUAR" na tela do registro. Nao e endereco de internet:
-/// e um recado da pagina pra ca, pelo mesmo caminho do botao do jogo.
+/// Os toques na tela do registro. Nao sao enderecos de internet: sao recados
+/// da pagina pra ca, pelo mesmo caminho do botao do jogo.
 const CONTINUAR: &str = "deathnote://continuar";
+const COPIAR: &str = "deathnote://copiar";
 
 /// As duas respostas possiveis pro WebKit, quando ele pergunta se pode
 /// navegar. Sao os valores de WKNavigationActionPolicy, que e um NSInteger.
@@ -125,7 +126,7 @@ define_class!(
             match registro::anterior() {
                 Some(texto) if registro::anterior_morreu() => {
                     tracing::info!("tela de entrada: a sessao passada morreu, mostrando");
-                    mostrar_o_registro(&navegador, &texto);
+                    mostrar_o_registro(&navegador, &texto, false);
                 }
                 _ => abrir_a_pagina(&navegador),
             }
@@ -177,9 +178,26 @@ define_class!(
         ) {
             let texto = endereco_da_acao(acao).unwrap_or_default();
 
-            // O "continuar" vem ANTES do teste geral de "deathnote:", senao
-            // ele cairia no caminho do jogo e seria lido como endereco de
-            // partida — que nao e.
+            // Estes vem ANTES do teste geral de "deathnote:", senao cairiam
+            // no caminho do jogo e seriam lidos como endereco de partida —
+            // que nao sao.
+            if texto.starts_with(COPIAR) {
+                decisao.call((NAO_NAVEGUE,));
+
+                // COPIA O REGISTRO INTEIRO, nao so o pedaco que esta na tela.
+                // Quem le depois quer o caminho todo; quem esta olhando agora
+                // so precisa das ultimas linhas.
+                if let Some(tudo) = registro::anterior() {
+                    // generalPasteboard nao pede o marcador de linha
+                    // principal: a area de transferencia nao e so da tela.
+                    let area = UIPasteboard::generalPasteboard();
+                    unsafe { area.setString(Some(&NSString::from_str(&tudo))) };
+                    tracing::info!("registro copiado: {} caracteres", tudo.len());
+                    mostrar_o_registro(&self.ivars().navegador, &tudo, true);
+                }
+                return;
+            }
+
             if texto.starts_with(CONTINUAR) {
                 decisao.call((NAO_NAVEGUE,));
                 registro::limpar_anterior();
@@ -228,8 +246,13 @@ fn endereco_da_acao(acao: &AnyObject) -> Option<String> {
 /// E uma pagina montada aqui mesmo, sem sair do aparelho: nada e enviado a
 /// lugar nenhum. O jogador ve, tira um print se quiser, e toca em CONTINUAR —
 /// que apaga o registro e leva pra tela de entrada de sempre.
-fn mostrar_o_registro(navegador: &WKWebView, texto: &str) {
-    let corpo = escapar(texto);
+fn mostrar_o_registro(navegador: &WKWebView, texto: &str, copiado: bool) {
+    let corpo = escapar(&so_o_fim(texto));
+    let aviso = if copiado {
+        r#"<p class="copiou">TEXTO COPIADO. Cole na conversa com o suporte.</p>"#
+    } else {
+        ""
+    };
     let pagina = format!(
         r#"<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8">
@@ -244,15 +267,21 @@ fn mostrar_o_registro(navegador: &WKWebView, texto: &str) {
   pre {{ background: #16141B; border: 1px solid #2A2632; border-radius: 12px;
          padding: 12px; font-size: 11px; line-height: 1.6; color: #CBD5E1;
          white-space: pre-wrap; word-break: break-word; margin: 0 0 16px; }}
-  a.seguir {{ display: block; text-align: center; text-decoration: none;
-              background: #C8102E; color: #fff; font-size: 16px; font-weight: 700;
-              letter-spacing: .12em; padding: 15px 14px; border-radius: 14px; }}
+  a.botao {{ display: block; text-align: center; text-decoration: none;
+             font-size: 16px; font-weight: 700; letter-spacing: .12em;
+             padding: 15px 14px; border-radius: 14px; margin-bottom: 10px; }}
+  a.copiar {{ background: #C8102E; color: #fff; }}
+  a.seguir {{ background: #16141B; color: #ECE5D8; border: 1px solid #2A2632; }}
+  p.copiou {{ font-size: 13px; color: #6EE7A8; margin: 0 0 12px;
+              text-align: center; font-weight: 700; }}
 </style></head><body>
 <h1>O APLICATIVO FECHOU SOZINHO DA ULTIMA VEZ</h1>
-<p class="sub">Tire um print desta tela e mande pro suporte. Depois toque em
-continuar para entrar no jogo normalmente.</p>
+<p class="sub">Toque em copiar e cole o texto na conversa com o suporte.
+Depois toque em continuar para entrar no jogo normalmente.</p>
 <pre id="oque">{corpo}</pre>
-<a class="seguir" href="{CONTINUAR}">CONTINUAR</a>
+{aviso}
+<a class="botao copiar" href="{COPIAR}">COPIAR O TEXTO</a>
+<a class="botao seguir" href="{CONTINUAR}">CONTINUAR</a>
 <script>
   // Os horarios estao guardados em segundos desde 1970, que e o formato que
   // nao depende de fuso nem de idioma. Aqui viram data legivel.
@@ -268,6 +297,29 @@ continuar para entrar no jogo normalmente.</p>
     let _: () = unsafe {
         msg_send![navegador, loadHTMLString: &*NSString::from_str(&pagina), baseURL: vazio]
     };
+}
+
+/// So as ultimas linhas do registro.
+///
+/// UMA PARTIDA GERA CENTENAS DE LINHAS — a medida de memoria sozinha rende
+/// uma a cada dois segundos, e numa prova de dez minutos foram 314. Mostrando
+/// tudo, a pagina abre no COMECO, e o print que o jogador manda pega
+/// justamente a parte que nao interessa: o aplicativo abrindo, com tudo bem.
+///
+/// O que importa sao os ultimos instantes, e e so isso que a tela mostra. O
+/// arquivo inteiro continua guardado no aparelho.
+const LINHAS_NA_TELA: usize = 40;
+
+fn so_o_fim(texto: &str) -> String {
+    let linhas: Vec<&str> = texto.lines().filter(|l| !l.trim().is_empty()).collect();
+
+    if linhas.len() <= LINHAS_NA_TELA {
+        return linhas.join("\n");
+    }
+
+    let cortadas = linhas.len() - LINHAS_NA_TELA;
+    let fim = linhas[cortadas..].join("\n");
+    format!("(... {cortadas} linhas anteriores omitidas ...)\n{fim}")
 }
 
 /// Impede que o conteudo do registro seja lido como marcacao da pagina.
