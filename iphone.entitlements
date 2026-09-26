@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- TETO DE MEMORIA AUMENTADO.
+
+	     O sistema mata o aplicativo que passa de um certo tamanho, sem aviso
+	     nenhum: e assim que um jogo "fecha sozinho" no iPhone. Esta permissao
+	     pede um teto mais alto pro proprio sistema.
+
+	     NAO E APROVACAO DA APPLE: nao passa por revisao, nao aparece pra
+	     ninguem, nao muda nada do que o aplicativo faz. E so um pedido de
+	     folga. Se o sistema nao puder atender (aparelho velho, pouca memoria
+	     livre), simplesmente ignora — nao ha caso em que ela piore algo.
+
+	     ESTA E A UNICA LINHA DESTE ARQUIVO, DE PROPOSITO.
+	     O ruffle-ios.entitlements que vem com o projeto pede coisas que so
+	     existem no macOS (caixa de areia, acesso a arquivos, rede) e derruba a
+	     assinatura no iPhone. Por isso a montagem passava a lista VAZIA. Aqui
+	     entra uma lista de um item so, valida no iPhone. -->
+	<key>com.apple.developer.kernel.increased-memory-limit</key>
+	<true/>
+</dict>
+</plist>
