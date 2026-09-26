@@ -106,10 +106,16 @@ jobs:
       # numero repetido, e o do projeto e fixo: sem isto, o segundo envio
       # falharia com "ja existe uma compilacao com esse numero".
       #
-      # CODE_SIGN_ENTITLEMENTS VAZIO: o ruffle-ios.entitlements do projeto pede
-      # permissoes que so existem no macOS (app-sandbox, arquivos, rede). No
-      # iPhone elas nao existem e derrubam a assinatura. No iOS o acesso a rede
-      # ja e livre, entao nao se perde nada.
+      # CODE_SIGN_ENTITLEMENTS: a NOSSA lista, nao a do projeto.
+      #
+      # O ruffle-ios.entitlements que vem com o projeto pede permissoes que so
+      # existem no macOS (app-sandbox, arquivos, rede) e derruba a assinatura
+      # no iPhone — por isso aqui passava VAZIO. Agora passa o iphone.entitlements,
+      # que tem UM item so e valido no iPhone: o teto de memoria aumentado.
+      #
+      # O que NAO se perde: no iOS o acesso a rede ja e livre, e a caixa de
+      # areia e obrigatoria de qualquer jeito. Nada do que o projeto pedia
+      # fazia falta aqui.
       #
       # A TELA DEITADA: o projeto tem GENERATE_INFOPLIST_FILE = YES, e nesse
       # modo o Xcode MISTURA as configuracoes INFOPLIST_KEY_* por cima do
@@ -136,7 +142,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY= \
-            CODE_SIGN_ENTITLEMENTS= \
+            CODE_SIGN_ENTITLEMENTS=iphone.entitlements \
             PRODUCT_BUNDLE_IDENTIFIER=$BUNDLE \
             MARKETING_VERSION=1.0 \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
@@ -241,6 +247,42 @@ jobs:
           }
           empacotar app-store-connect
           ls -lh saida/*.ipa
+
+      # O QUE FOI ASSINADO DE VERDADE.
+      #
+      # Isto nao e zelo excessivo: a permissao de memoria e pedida em DOIS
+      # lugares que precisam concordar — o arquivo aqui e a capacidade
+      # "Increased Memory Limit" marcada no identificador, no painel da Apple.
+      # Faltando a segunda, o Xcode assina do mesmo jeito e a permissao
+      # simplesmente NAO VAI: o aplicativo sobe, funciona, e continua com o
+      # teto antigo, calado. Descobrir isso pelo aparelho do testador custaria
+      # um ciclo inteiro dele; aqui custa dois segundos.
+      #
+      # NAO FALHA O ENVIO. A permissao e um extra: se ela nao entrou, o resto
+      # da compilacao continua valendo e o aviso fica no registro.
+      - name: Conferir a permissao de memoria
+        run: |
+          cd saida
+          ARQUIVO=$(ls *.ipa | head -1)
+          rm -rf conferir && mkdir conferir
+          unzip -q "$ARQUIVO" -d conferir
+          APP=$(find conferir/Payload -maxdepth 1 -name '*.app' | head -1)
+          echo "aplicativo assinado: $APP"
+
+          echo ""
+          echo "--- permissoes que foram REALMENTE assinadas:"
+          codesign -d --entitlements :- "$APP" 2>/dev/null || true
+
+          echo ""
+          if codesign -d --entitlements :- "$APP" 2>/dev/null              | grep -q "increased-memory-limit"; then
+            echo "OK: o teto de memoria aumentado ESTA no aplicativo."
+          else
+            echo "AVISO: o teto de memoria aumentado NAO entrou."
+            echo "Falta marcar 'Increased Memory Limit' no identificador"
+            echo "$BUNDLE, em developer.apple.com > Identifiers."
+            echo "O envio continua: isto nao impede nada, so nao ajuda."
+          fi
+          cd ..
 
       - name: Mandar pro TestFlight
         env:
