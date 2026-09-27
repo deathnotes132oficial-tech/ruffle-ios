@@ -55,6 +55,48 @@ jobs:
           rustup target add aarch64-apple-ios
           rustup target list --installed
 
+      # ATUALIZAR O RUFFLE.
+      #
+      # POR QUE
+      # -------
+      # O Cargo.lock do repositorio prende o Ruffle numa versao de 27 de
+      # janeiro de 2026. O Ruffle do navegador, que roda o mesmo jogo sem os
+      # defeitos que o testador relatou (a cratera do terreno destrutivel),
+      # se atualiza sozinho. Nao e outro programa: e o mesmo, com meses de
+      # conserto de diferenca.
+      #
+      # POR QUE NAO BASTA APAGAR O Cargo.lock
+      # -------------------------------------
+      # Sem ele cada compilacao pegaria um Ruffle diferente, e a gente perderia
+      # a resposta pra pergunta mais basica quando algo quebrar: "qual versao
+      # estava no aparelho?". O arquivo continua mandando; este passo so o
+      # move pra frente e DIZ pra onde moveu.
+      #
+      # O REPOSITORIO NAO MUDA AQUI.
+      # A atualizacao vale so dentro desta maquina. O Cargo.lock novo sai
+      # junto do .ipa, pra ser subido a mao DEPOIS que a compilacao provar que
+      # ele presta. Se nao compilar, nada mudou e nao ha o que desfazer.
+      - name: Atualizar o Ruffle
+        run: |
+          set -e
+          antes=$(grep -A2 'name = "ruffle_core"' Cargo.lock | grep source || true)
+          echo "--- versao presa hoje:"
+          echo "$antes"
+
+          echo ""
+          echo "--- buscando a mais nova:"
+          cargo update -p ruffle_core
+
+          depois=$(grep -A2 'name = "ruffle_core"' Cargo.lock | grep source || true)
+          echo ""
+          echo "--- versao depois:"
+          echo "$depois"
+
+          if [ "$antes" = "$depois" ]; then
+            echo ""
+            echo "NAO MUDOU NADA. O Ruffle ja estava na versao mais nova."
+          fi
+
       - name: Descobrir o nome do projeto
         id: achar
         run: |
@@ -389,5 +431,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: app-de-iphone
-          path: saida/*.ipa
+          path: |
+            saida/*.ipa
+            Cargo.lock
           if-no-files-found: warn
