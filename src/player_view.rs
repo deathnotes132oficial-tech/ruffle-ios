@@ -43,6 +43,18 @@ pub struct Ivars {
     /// texto durante a carga, o Ruffle avisa, e nos obedeciamos — com o
     /// jogador sem ter tocado em nada e sem conseguir fechar.
     ultimo_toque: Cell<Option<Instant>>,
+    /// A escolha do jogador, quando ele usa o botao.
+    ///
+    /// None = segue o que o Ruffle pedir. Some(x) = o jogador mandou, e vale
+    /// ate a situacao mudar.
+    ///
+    /// ISTO PRECISOU EXISTIR porque o Ruffle avisa quando ABRIR e quase nunca
+    /// quando FECHAR: no DDTank o cursor fica no campo do chat o tempo todo,
+    /// entao o pedido nunca se desfaz sozinho. Sem o botao, o teclado subia e
+    /// nao tinha como tirar.
+    teclado_manual: Cell<Option<bool>>,
+    /// O ultimo pedido do Ruffle, so pra perceber quando ele MUDA.
+    pedido_anterior: Cell<bool>,
     /// Se o teclado esta na tela AGORA. Sem isto, pediriamos pra abrir a cada
     /// quadro enquanto o cursor estivesse no campo — 60 pedidos por segundo
     /// pra uma coisa que ja esta aberta.
@@ -446,18 +458,29 @@ impl PlayerView {
         // A comparacao com o estado atual e o que impede de pedir 60 vezes
         // por segundo: so age quando a bandeira MUDA.
         if let Some(pedido) = self.ivars().teclado.get() {
-            let quer = pedido.aberto();
-            // ABRIR EXIGE TOQUE RECENTE; FECHAR, NAO.
+            // QUANDO O PEDIDO DO RUFFLE MUDA, O JOGADOR PERDE A PALAVRA.
             //
-            // O pedido de abrir so vale se o jogador encostou na tela ha
-            // pouco — foi ele quem tocou no chat. Pedido que chega sozinho,
-            // como durante o carregamento, fica esperando: se o jogador
-            // tocar depois, o teclado sobe ali.
+            // A escolha manual vale ate a situacao mudar. Trocou de campo,
+            // saiu do chat, entrou noutra tela — volta ao automatico, senao o
+            // jogador teria que desfazer a escolha na mao toda vez.
+            let do_ruffle = pedido.aberto();
+            if do_ruffle != self.ivars().pedido_anterior.get() {
+                self.ivars().pedido_anterior.set(do_ruffle);
+                self.ivars().teclado_manual.set(None);
+            }
+
+            let manual = self.ivars().teclado_manual.get();
+            let quer = manual.unwrap_or(do_ruffle);
+
+            // ABRIR SOZINHO EXIGE TOQUE RECENTE; PELO BOTAO, NAO.
             //
-            // O fechar nao passa por essa peneira, de proposito. Quem esta
-            // digitando nao esta tocando na tela, e o teclado nao pode se
-            // recusar a sumir.
-            let pode = !quer || self.toque_recente();
+            // Pedido que chega sem ninguem ter encostado na tela — como
+            // durante o carregamento — fica esperando. Ja o toque no botao e
+            // ordem direta e nao passa por peneira nenhuma.
+            //
+            // Fechar tambem nao passa: quem esta digitando nao esta tocando na
+            // tela, e o teclado nao pode se recusar a sumir.
+            let pode = !quer || manual.is_some() || self.toque_recente();
             if quer != self.ivars().mostrando_teclado.get() && pode {
                 self.ivars().mostrando_teclado.set(quer);
                 let _: bool = if quer {
@@ -493,6 +516,14 @@ impl PlayerView {
     /// Guarda a bandeira do teclado. Chamada uma vez, quando o jogo sobe.
     pub fn definir_teclado(&self, pedido: PedidoDeTeclado) {
         let _ = self.ivars().teclado.set(pedido);
+    }
+
+    /// O botao do teclado: abre se esta fechado, fecha se esta aberto.
+    ///
+    /// Vale mais que o pedido do Ruffle, ate a situacao mudar.
+    pub fn alternar_teclado(&self) {
+        let agora = self.ivars().mostrando_teclado.get();
+        self.ivars().teclado_manual.set(Some(!agora));
     }
 
     /// Houve toque ha pouco?

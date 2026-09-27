@@ -49,6 +49,9 @@ const OLHO: isize = 19;
 const PALETA: isize = 20;
 /// Corta o som do jogo no motor. So aparece no terceiro modo do olho.
 const MUDO: isize = 21;
+/// Abre e fecha o teclado do iPhone. Fica sempre a mao: sem ele, teclado que
+/// sobe nao desce, porque o jogo mantem o cursor no campo do chat.
+const TECLADO: isize = 22;
 /// Onde a escolha de som fica guardada entre uma partida e outra.
 const CHAVE_MUDO: &str = "som_mudo";
 
@@ -247,6 +250,7 @@ define_class!(
                 OLHO => self.alternar_olho(),
                 PALETA => self.alternar_paleta(),
                 MUDO => self.alternar_som(),
+                TECLADO => self.view().alternar_teclado(),
                 _ => self.mandar_tecla(indice, true),
             }
         }
@@ -306,7 +310,7 @@ define_class!(
         #[unsafe(method(controleSolto:))]
         fn controleSolto(&self, botao: &UIButton) {
             let indice = botao.tag();
-            if indice != OLHO && indice != PALETA && indice != MUDO {
+            if indice != OLHO && indice != PALETA && indice != MUDO && indice != TECLADO {
                 self.mandar_tecla(indice, false);
             }
         }
@@ -670,6 +674,7 @@ impl PlayerController {
         rotulos.push(String::new()); // olho, desenhado com simbolo
         rotulos.push("\u{21C4}".to_string()); // trocar teclas
         rotulos.push(Self::rotulo_mudo(self.ivars().mudo.get()));
+        rotulos.push("\u{2328}".to_string()); // teclado
         let rotulos: Vec<(usize, String)> = rotulos.into_iter().enumerate().collect();
 
         for (indice, rotulo) in rotulos.iter() {
@@ -796,6 +801,12 @@ impl PlayerController {
         // O trocar fica embaixo do Z, e o mudo ao lado dele.
         por(PALETA as usize, folga, folga + 2.0 * passo, lado, lado);
         por(MUDO as usize, folga + passo, folga + 2.0 * passo, lado, lado);
+        // O TECLADO FICA NA MESMA FILEIRA, MAS SEMPRE VISIVEL.
+        //
+        // No alto a esquerda de proposito: o teclado do iPhone cobre a parte
+        // de baixo da tela, e um botao de fechar que o proprio teclado tapa
+        // nao serve pra nada.
+        por(TECLADO as usize, folga + 2.0 * passo, folga + 2.0 * passo, lado, lado);
         // setas em cruz
         let celula = lado * 0.85;
         let base = altura - celula * 3.0 - folga;
