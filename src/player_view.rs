@@ -17,7 +17,7 @@ use objc2_ui_kit::{
     UIViewContentMode,
 };
 use ruffle_core::events::{KeyDescriptor, KeyLocation, LogicalKey, MouseButton, PhysicalKey};
-use ruffle_core::{Player, PlayerEvent, ViewportDimensions};
+use ruffle_core::{FloatDuration, Player, PlayerEvent, ViewportDimensions};
 use ruffle_render_wgpu::backend::WgpuRenderBackend;
 use ruffle_render_wgpu::target::SwapChainTarget;
 
@@ -324,6 +324,11 @@ impl PlayerView {
                 (dimensions.width.max(1), dimensions.height.max(1)),
                 wgpu::Backends::METAL,
                 wgpu::PowerPreference::HighPerformance,
+                // O QUINTO ARGUMENTO E NOVO no Ruffle: por onde achar a tela,
+                // pras plataformas em que isso nao e obvio. No iPhone a
+                // camada do Metal que passamos logo acima ja diz tudo, entao
+                // aqui nao ha o que informar.
+                None,
             )
             .expect("creating renderer")
         }
@@ -379,7 +384,13 @@ impl PlayerView {
 
         let mut player_lock = self.player_lock();
 
-        player_lock.tick(dt as f64 / 1_000_000.0);
+        // O TICK AGORA RECEBE UMA DURACAO, NAO UM NUMERO SOLTO.
+        //
+        // Antes era um f64 em milissegundos e cabia a quem chamava lembrar
+        // disso. O Ruffle passou a exigir FloatDuration, que carrega a
+        // unidade junto — o dt daqui vem em nanossegundos, e a divisao por um
+        // milhao continua sendo o que o transforma em milissegundos.
+        player_lock.tick(FloatDuration::from_millis(dt as f64 / 1_000_000.0));
         // FIXME: The instant that `time_til_next_frame` is relative to isn't
         // defined, so we have to assume that it's roughly relative to "now".
         let next_fire =
