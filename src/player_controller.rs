@@ -801,11 +801,7 @@ impl PlayerController {
         // O trocar fica embaixo do Z, e o mudo ao lado dele.
         por(PALETA as usize, folga, folga + 2.0 * passo, lado, lado);
         por(MUDO as usize, folga + passo, folga + 2.0 * passo, lado, lado);
-        // O TECLADO FICA NA MESMA FILEIRA, MAS SEMPRE VISIVEL.
-        //
-        // No alto a esquerda de proposito: o teclado do iPhone cobre a parte
-        // de baixo da tela, e um botao de fechar que o proprio teclado tapa
-        // nao serve pra nada.
+        // O teclado fica ao lado do som, na mesma fileira.
         por(TECLADO as usize, folga + 2.0 * passo, folga + 2.0 * passo, lado, lado);
         // setas em cruz
         let celula = lado * 0.85;
@@ -1048,9 +1044,14 @@ impl PlayerController {
                 true
             } else if escondidos {
                 false
-            } else if indice == MUDO {
-                // So no modo de ajustes. Nos outros ele sairia do caminho de
-                // um dedo que esta jogando.
+            } else if indice == MUDO || indice == TECLADO {
+                // So no modo de ajustes. Nos outros eles sairiam do caminho
+                // de um dedo que esta jogando.
+                //
+                // O do teclado fica nesta fileira, e nao mais abaixo, por um
+                // motivo pratico: ela esta no terco de cima da tela, e o
+                // teclado do iPhone cobre a metade de baixo. Botao de fechar
+                // que o proprio teclado tapa nao serve pra nada.
                 ajustes
             } else if (LIVRE_0..LIVRE_0 + LIVRES as isize).contains(&indice) {
                 paleta
