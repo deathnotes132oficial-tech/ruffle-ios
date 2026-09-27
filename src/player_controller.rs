@@ -727,7 +727,12 @@ impl PlayerController {
         let limites = self.view().bounds();
         let largura = limites.size.width;
         let altura = limites.size.height;
-        eprintln!("CONTROLES posicionando em {largura} x {altura}");
+        // A faixa preta de cada lado, so pra constar no registro: com ela da
+        // pra saber, em qualquer aparelho, se os controles da direita couberam
+        // inteiros fora do jogo ou se ainda invadem um pedaco.
+        let escala_jogo = (largura / 1000.0).min(altura / 600.0);
+        let faixa = (largura - 1000.0 * escala_jogo) / 2.0;
+        eprintln!("CONTROLES posicionando em {largura} x {altura} | faixa preta {faixa:.0}");
         if largura < 2.0 || altura < 2.0 {
             // A tela ainda nao tem tamanho de verdade; volta quando tiver.
             return;
@@ -772,11 +777,20 @@ impl PlayerController {
         por(8, folga + celula, base, celula, celula); // cima
         por(9, folga + celula * 2.0, base + celula, celula, celula); // direita
         por(10, folga + celula, base + celula * 2.0, celula, celula); // baixo
-        // espaco, embaixo a direita — meio bloco pra dentro, pra deixar a
-        // coluna da ponta livre pros botoes do proprio jogo.
+        // ESPACO E MOUSE ENCOSTADOS NA BORDA DIREITA.
+        //
+        // Antes eles eram puxados um bloco pra dentro, pra deixar a coluna da
+        // ponta livre pros botoes do proprio jogo. Na pratica cobriam esses
+        // botoes assim mesmo, e ainda sobrava tarja preta na ponta sem uso.
+        //
+        // O JOGO NAO OCUPA A TELA TODA. Ele e 1000x600 e fica centralizado,
+        // entao sobra uma faixa preta de cada lado — quanto, depende do
+        // aparelho. Encostando na borda, os controles caem dentro dessa faixa
+        // ate onde ela der, e so invadem o jogo no que faltar. E o mesmo
+        // criterio da coluna da esquerda, que ja encosta na outra ponta.
         let largo = lado * 2.4;
         let alto = lado * 1.3;
-        let x_espaco = largura - folga - largo - passo;
+        let x_espaco = largura - folga - largo;
         let y_espaco = altura - folga - alto;
         por(11, x_espaco, y_espaco, largo, alto);
 
