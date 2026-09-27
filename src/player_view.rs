@@ -9,15 +9,19 @@ use objc2::{define_class, msg_send, sel, ClassType, DefinedClass as _};
 use objc2_core_foundation::CGRect;
 use objc2_foundation::{
     MainThreadMarker, NSCoder, NSDate, NSObjectProtocol, NSRunLoop, NSRunLoopCommonModes, NSSet,
-    NSTimer,
+    NSString, NSTimer,
 };
 use objc2_quartz_core::{CALayer, CALayerDelegate, CAMetalLayer};
 use objc2_ui_kit::{
-    UIEvent, UIKey, UIPress, UIPressPhase, UIPressesEvent, UITouch, UITouchPhase, UIView,
-    UIViewContentMode,
+    UIEvent, UIKey, UIKeyInput, UIPress, UIPressPhase, UIPressesEvent, UITextInputTraits, UITouch,
+    UITouchPhase, UIView, UIViewContentMode,
 };
-use ruffle_core::events::{KeyDescriptor, KeyLocation, LogicalKey, MouseButton, PhysicalKey};
+use ruffle_core::events::{
+    KeyDescriptor, KeyLocation, LogicalKey, MouseButton, PhysicalKey, TextControlCode,
+};
 use ruffle_core::{FloatDuration, Player, PlayerEvent, ViewportDimensions};
+
+use crate::teclado::PedidoDeTeclado;
 use ruffle_render_wgpu::backend::WgpuRenderBackend;
 use ruffle_render_wgpu::target::SwapChainTarget;
 
@@ -30,6 +34,12 @@ pub struct Ivars {
     /// encheria o registro de milhares de linhas iguais e ainda escreveria em
     /// disco 60 vezes por segundo.
     ultima_medida: Cell<Option<Instant>>,
+    /// A bandeira que o Ruffle levanta quando o jogo quer teclado.
+    teclado: OnceCell<PedidoDeTeclado>,
+    /// Se o teclado esta na tela AGORA. Sem isto, pediriamos pra abrir a cada
+    /// quadro enquanto o cursor estivesse no campo — 60 pedidos por segundo
+    /// pra uma coisa que ja esta aberta.
+    mostrando_teclado: Cell<bool>,
 }
 
 impl fmt::Debug for Ivars {
@@ -49,6 +59,14 @@ define_class!(
     pub struct PlayerView;
 
     unsafe impl NSObjectProtocol for PlayerView {}
+
+    // A CONFORMIDADE, declarada sem corpo.
+    //
+    // O iPhone so mostra teclado pra quem declara que aceita entrada de
+    // texto. Os metodos ficam soltos la em cima; aqui esta a declaracao de
+    // que esta tela os tem.
+    unsafe impl UITextInputTraits for PlayerView {}
+    unsafe impl UIKeyInput for PlayerView {}
 
     /// Initialization.
     impl PlayerView {
@@ -87,10 +105,18 @@ define_class!(
             true
         }
 
+        // CHAMAR O ORIGINAL, E NAO SO RESPONDER QUE SIM.
+        //
+        // Antes isto devolvia true sem chamar o de cima. Parece inofensivo e
+        // nao e: quem promove a tela a primeiro respondente — e, com isso,
+        // quem faz o teclado subir — e justamente a maquina do iOS que fica
+        // no original. Respondendo sozinho, o aplicativo dizia "sim, sou o
+        // primeiro respondente" sem nunca ter se tornado um, e o teclado
+        // nunca apareceria. Sem erro, sem aviso, sem nada pra investigar.
         #[unsafe(method(becomeFirstResponder))]
         fn becomeFirstResponder(&self) -> bool {
             tracing::info!("becomeFirstResponder");
-            true
+            unsafe { msg_send![super(self), becomeFirstResponder] }
         }
 
         #[unsafe(method(canResignFirstResponder))]
@@ -101,7 +127,7 @@ define_class!(
         #[unsafe(method(resignFirstResponder))]
         fn resignFirstResponder(&self) -> bool {
             tracing::info!("resignFirstResponder");
-            true
+            unsafe { msg_send![super(self), resignFirstResponder] }
         }
 
         #[unsafe(method(touchesBegan:withEvent:))]
@@ -190,6 +216,32 @@ define_class!(
                 let _: () =
                     unsafe { msg_send![super(self), pressesCancelled: presses, withEvent: event] };
             }
+        }
+
+        // AS TRES PECAS QUE O IPHONE EXIGE PRA MOSTRAR TECLADO.
+        //
+        // Elas sao declaradas soltas, e a conformidade com o protocolo e
+        // declarada logo abaixo. E o mesmo caminho que usamos na tela de
+        // entrada: em Objective-C o que vale e o nome do metodo, e declarar
+        // as duas coisas separadas evita depender de como a biblioteca
+        // batizou cada funcao.
+        //
+        // hasText responde sempre que sim. Ela existe pro iPhone saber se a
+        // tecla de apagar deve ficar ativa; quem controla o texto de verdade
+        // e o jogo, dentro do Flash, e daqui nao da pra perguntar a ele.
+        #[unsafe(method(hasText))]
+        fn hasText(&self) -> bool {
+            true
+        }
+
+        #[unsafe(method(insertText:))]
+        fn insertText(&self, texto: &NSString) {
+            self.digitar(&texto.to_string());
+        }
+
+        #[unsafe(method(deleteBackward))]
+        fn deleteBackward(&self) {
+            self.apagar();
         }
 
         #[unsafe(method(remoteControlReceivedWithEvent:))]
@@ -382,6 +434,24 @@ impl PlayerView {
             crate::registro::anotar_memoria();
         }
 
+        // O TECLADO, SE O JOGO PEDIU.
+        //
+        // A comparacao com o estado atual e o que impede de pedir 60 vezes
+        // por segundo: so age quando a bandeira MUDA.
+        if let Some(pedido) = self.ivars().teclado.get() {
+            let quer = pedido.aberto();
+            if quer != self.ivars().mostrando_teclado.get() {
+                self.ivars().mostrando_teclado.set(quer);
+                let _: bool = if quer {
+                    tracing::info!("abrindo o teclado");
+                    unsafe { msg_send![self, becomeFirstResponder] }
+                } else {
+                    tracing::info!("fechando o teclado");
+                    unsafe { msg_send![self, resignFirstResponder] }
+                };
+            }
+        }
+
         let mut player_lock = self.player_lock();
 
         // O TICK AGORA RECEBE UMA DURACAO, NAO UM NUMERO SOLTO.
@@ -397,6 +467,53 @@ impl PlayerView {
             NSDate::dateWithTimeIntervalSinceNow(player_lock.time_til_next_frame().as_secs_f64());
         self.timer().setFireDate(&next_fire);
 
+        if player_lock.needs_render() {
+            self.layer().setNeedsDisplay();
+        }
+    }
+
+    /// Guarda a bandeira do teclado. Chamada uma vez, quando o jogo sobe.
+    pub fn definir_teclado(&self, pedido: PedidoDeTeclado) {
+        let _ = self.ivars().teclado.set(pedido);
+    }
+
+    /// O que foi digitado no teclado do iPhone, entregue ao jogo.
+    ///
+    /// Vem uma letra por vez, mas pode vir um punhado de uma vez so quando a
+    /// pessoa cola texto ou quando o proprio teclado sugere uma palavra.
+    fn digitar(&self, texto: &str) {
+        if self.ivars().player.get().is_none() {
+            return;
+        }
+        let mut player_lock = self.player_lock();
+        for letra in texto.chars() {
+            // A TECLA DE ENVIAR NAO E UMA LETRA.
+            //
+            // O teclado do iPhone manda a quebra de linha como se fosse
+            // texto. Entregue assim, ela viraria um caractere estranho dentro
+            // da mensagem em vez de envia-la. O jogo espera o Enter.
+            if letra == '\n' || letra == '\r' {
+                player_lock.handle_event(PlayerEvent::TextControl {
+                    code: TextControlCode::Enter,
+                });
+            } else {
+                player_lock.handle_event(PlayerEvent::TextInput { codepoint: letra });
+            }
+        }
+        if player_lock.needs_render() {
+            self.layer().setNeedsDisplay();
+        }
+    }
+
+    /// A tecla de apagar.
+    fn apagar(&self) {
+        if self.ivars().player.get().is_none() {
+            return;
+        }
+        let mut player_lock = self.player_lock();
+        player_lock.handle_event(PlayerEvent::TextControl {
+            code: TextControlCode::Backspace,
+        });
         if player_lock.needs_render() {
             self.layer().setNeedsDisplay();
         }

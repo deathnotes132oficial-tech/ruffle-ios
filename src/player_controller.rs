@@ -492,6 +492,16 @@ impl PlayerController {
             // TODO
         }
 
+        // O TECLADO.
+        //
+        // A bandeira e criada aqui e entregue aos dois lados: ao Ruffle, que
+        // a levanta quando o jogo poe o cursor num campo de texto, e a tela,
+        // que a le no laco de quadro e abre ou fecha o teclado do iPhone.
+        // Nenhum dos dois conhece o outro.
+        let teclado = crate::teclado::PedidoDeTeclado::default();
+        view.definir_teclado(teclado.clone());
+        builder = builder.with_ui(crate::teclado::InterfaceDoIphone::new(teclado));
+
         match CpalAudioBackend::new(None) {
             Ok(audio) => builder = builder.with_audio(audio),
             Err(e) => tracing::error!("Unable to create audio device: {e}"),

@@ -14,6 +14,7 @@ mod player_controller;
 mod player_view;
 mod registro;
 mod scene_delegate;
+mod teclado;
 mod tela_de_entrada;
 mod storage;
 
