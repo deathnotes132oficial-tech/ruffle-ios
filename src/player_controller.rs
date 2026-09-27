@@ -47,6 +47,10 @@ const LIVRE_0: isize = 12;
 const OLHO: isize = 19;
 /// O botao que troca as duas fileiras de cima pelas teclas personalizaveis.
 const PALETA: isize = 20;
+/// Corta o som do jogo no motor. So aparece no terceiro modo do olho.
+const MUDO: isize = 21;
+/// Onde a escolha de som fica guardada entre uma partida e outra.
+const CHAVE_MUDO: &str = "som_mudo";
 
 #[derive(Clone, Debug)]
 pub struct FutureSpawner {
@@ -115,8 +119,18 @@ pub struct Ivars {
     /// personalizaveis. E o botao de trocar, igual ao do APK.
     paleta_aberta: Cell<bool>,
 
-    /// O olho: esconde tudo menos ele proprio.
-    escondidos: Cell<bool>,
+    /// O olho, em tres modos.
+    ///
+    /// 0 = jogar (os controles de sempre)
+    /// 1 = escondido (so o olho, pra ver a tela inteira)
+    /// 2 = ajustes (os controles MAIS a fileira de configuracao)
+    ///
+    /// Nesta ordem de proposito: esconder e o que mais se usa, entao fica a
+    /// um toque. Os ajustes sao raros e ficam a dois.
+    modo_olho: Cell<u8>,
+
+    /// O som esta cortado? Guardado entre partidas.
+    mudo: Cell<bool>,
 
     /// Qual tecla cada botao personalizavel manda hoje.
     /// None = vazio (mostra "+"), Some(i) = posicao na lista de opcoes.
@@ -232,6 +246,7 @@ define_class!(
             match indice {
                 OLHO => self.alternar_olho(),
                 PALETA => self.alternar_paleta(),
+                MUDO => self.alternar_som(),
                 _ => self.mandar_tecla(indice, true),
             }
         }
@@ -291,7 +306,7 @@ define_class!(
         #[unsafe(method(controleSolto:))]
         fn controleSolto(&self, botao: &UIButton) {
             let indice = botao.tag();
-            if indice != OLHO && indice != PALETA {
+            if indice != OLHO && indice != PALETA && indice != MUDO {
                 self.mandar_tecla(indice, false);
             }
         }
@@ -359,7 +374,10 @@ impl PlayerController {
             player: OnceCell::new(),
             controles: RefCell::new(Vec::new()),
             paleta_aberta: Cell::new(false),
-            escondidos: Cell::new(false),
+            modo_olho: Cell::new(0),
+            mudo: Cell::new(unsafe {
+                NSUserDefaults::standardUserDefaults().boolForKey(&NSString::from_str(CHAVE_MUDO))
+            }),
             livres: RefCell::new(Vec::new()),
             area_mouse: RefCell::new(None),
             seta: RefCell::new(None),
@@ -530,6 +548,12 @@ impl PlayerController {
             .player
             .set(player)
             .unwrap_or_else(|_| panic!("viewDidLoad once"));
+
+        // A ESCOLHA GUARDADA VALE DESDE O PRIMEIRO SOM.
+        //
+        // Sem isto, quem desligou o som numa partida ouviria a abertura da
+        // seguinte antes de conseguir desligar de novo.
+        self.aplicar_som();
     }
 
     fn view_is_appearing(&self, _animated: bool) {
@@ -645,6 +669,7 @@ impl PlayerController {
         }
         rotulos.push(String::new()); // olho, desenhado com simbolo
         rotulos.push("\u{21C4}".to_string()); // trocar teclas
+        rotulos.push(Self::rotulo_mudo(self.ivars().mudo.get()));
         let rotulos: Vec<(usize, String)> = rotulos.into_iter().enumerate().collect();
 
         for (indice, rotulo) in rotulos.iter() {
@@ -768,8 +793,9 @@ impl PlayerController {
         }
         // O olho fica depois do C, e nunca troca de lugar.
         por(OLHO as usize, folga + 3.0 * passo, folga + passo, lado, lado);
-        // O trocar fica embaixo do Z.
+        // O trocar fica embaixo do Z, e o mudo ao lado dele.
         por(PALETA as usize, folga, folga + 2.0 * passo, lado, lado);
+        por(MUDO as usize, folga + passo, folga + 2.0 * passo, lado, lado);
         // setas em cruz
         let celula = lado * 0.85;
         let base = altura - celula * 3.0 - folga;
@@ -944,11 +970,50 @@ impl PlayerController {
         }
     }
 
-    /// O olho: esconde todos os botoes menos ele proprio.
+    /// O olho, girando entre os tres modos: jogar, escondido, ajustes.
     fn alternar_olho(&self) {
-        let escondendo = !self.ivars().escondidos.get();
-        self.ivars().escondidos.set(escondendo);
+        let proximo = (self.ivars().modo_olho.get() + 1) % 3;
+        self.ivars().modo_olho.set(proximo);
         self.aplicar_paleta();
+    }
+
+    /// Corta ou devolve o som, no MOTOR.
+    ///
+    /// Isto nao e a configuracao de som do jogo: e o volume do proprio Ruffle.
+    /// A diferenca importa — pelo jogo, desligar a musica as vezes nao pega;
+    /// aqui o som simplesmente nao sai, porque quem toca e o motor.
+    fn alternar_som(&self) {
+        let mudo = !self.ivars().mudo.get();
+        self.ivars().mudo.set(mudo);
+        self.aplicar_som();
+
+        // Guarda a escolha: quem joga sem som quer continuar sem som.
+        let padroes = unsafe { NSUserDefaults::standardUserDefaults() };
+        unsafe { padroes.setBool_forKey(mudo, &NSString::from_str(CHAVE_MUDO)) };
+
+        if let Some(botao) = self.ivars().controles.borrow().get(MUDO as usize) {
+            unsafe {
+                botao.setTitle_forState(
+                    Some(&NSString::from_str(&Self::rotulo_mudo(mudo))),
+                    UIControlState::Normal,
+                )
+            };
+        }
+    }
+
+    /// Manda o volume pro motor. Chamada tambem quando o jogo sobe, pra que a
+    /// escolha guardada valha desde o primeiro som.
+    fn aplicar_som(&self) {
+        if self.ivars().player.get().is_none() {
+            return;
+        }
+        let volume = if self.ivars().mudo.get() { 0.0 } else { 1.0 };
+        self.player_lock().set_volume(volume);
+    }
+
+    /// O rotulo diz o ESTADO, nao o que o toque faz.
+    fn rotulo_mudo(mudo: bool) -> String {
+        if mudo { "MUDO" } else { "SOM" }.to_string()
     }
 
     /// Troca as duas fileiras de cima entre as teclas do jogo e as suas.
@@ -961,7 +1026,9 @@ impl PlayerController {
     /// Decide quem aparece: o olho manda em todos, a paleta manda nas duas
     /// fileiras de cima.
     fn aplicar_paleta(&self) {
-        let escondidos = self.ivars().escondidos.get();
+        let modo = self.ivars().modo_olho.get();
+        let escondidos = modo == 1;
+        let ajustes = modo == 2;
         let paleta = self.ivars().paleta_aberta.get();
         let guardados = self.ivars().controles.borrow();
         for (indice, botao) in guardados.iter().enumerate() {
@@ -970,6 +1037,10 @@ impl PlayerController {
                 true
             } else if escondidos {
                 false
+            } else if indice == MUDO {
+                // So no modo de ajustes. Nos outros ele sairia do caminho de
+                // um dedo que esta jogando.
+                ajustes
             } else if (LIVRE_0..LIVRE_0 + LIVRES as isize).contains(&indice) {
                 paleta
             } else if (0..7).contains(&indice) {
