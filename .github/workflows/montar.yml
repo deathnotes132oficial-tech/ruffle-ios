@@ -22,6 +22,11 @@ name: Mandar pro TestFlight
 # So roda quando voce mandar, pelo botao. Nada acontece sozinho.
 on:
   workflow_dispatch:
+    inputs:
+      atualizar_ruffle:
+        description: "Atualizar o Ruffle (marque so quando for a intencao)"
+        type: boolean
+        default: false
 
 env:
   # O endereco do app na Apple. NAO PODE MUDAR depois do primeiro envio.
@@ -76,7 +81,20 @@ jobs:
       # A atualizacao vale so dentro desta maquina. O Cargo.lock novo sai
       # junto do .ipa, pra ser subido a mao DEPOIS que a compilacao provar que
       # ele presta. Se nao compilar, nada mudou e nao ha o que desfazer.
+      #
+      # SO RODA SE VOCE MARCAR A CAIXINHA.
+      # -----------------------------------
+      # Rodando sempre, toda compilacao viraria uma aposta: o Ruffle muda
+      # quase todo dia, e um envio pro TestFlight poderia falhar sem nada ter
+      # mudado aqui. Desmarcado, vale o Cargo.lock do repositorio e a
+      # compilacao de hoje sai igual a de amanha.
+      #
+      # ATUALIZAR TRAZ CONSERTOS E TRAZ RISCO NA MESMA VIAGEM. Ja aconteceu
+      # duas vezes: funcoes do Ruffle ganharam argumento novo, e o wgpu pulou
+      # da versao 27 pra 30 — e a versao do wgpu aqui e la TEM QUE SER A
+      # MESMA, senao aparecem dois tipos de mesmo nome que nao se convertem.
       - name: Atualizar o Ruffle
+        if: ${{ inputs.atualizar_ruffle }}
         run: |
           set -e
           antes=$(grep -A2 'name = "ruffle_core"' Cargo.lock | grep source || true)
