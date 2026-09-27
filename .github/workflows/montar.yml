@@ -162,6 +162,67 @@ jobs:
             INFOPLIST_KEY_ITSAppUsesNonExemptEncryption=NO \
             archive
 
+      # GRAVAR O TETO DE MEMORIA NO APLICATIVO COMPILADO.
+      #
+      # DUAS TENTATIVAS ANTERIORES, E POR QUE CADA UMA FALHOU
+      # -----------------------------------------------------
+      #   1. pendurar CODE_SIGN_ENTITLEMENTS no passo de compilar: nao faz
+      #      nada. Com CODE_SIGNING_ALLOWED=NO o Xcode pula a etapa que grava
+      #      permissoes, e o arquivo apontado nunca e lido. Isso nao e teoria:
+      #      a compilacao 14 saiu assim e o .ipa dela, aberto e lido, tinha
+      #      so application-identifier, beta-reports-active, team-identifier e
+      #      get-task-allow.
+      #   2. reassinar o .ipa depois de pronto: "0 valid identities found". O
+      #      empacotamento se autentica na Apple por CHAVE DE API, que nao
+      #      deixa certificado nem chave privada no chaveiro da maquina. O
+      #      Xcode assina porque fala com a Apple; um codesign solto depois
+      #      nao tem com o que assinar.
+      #
+      # O QUE FUNCIONA: ASSINATURA AD-HOC
+      # ---------------------------------
+      # Assinar com "-" e assinatura sem certificado. Ela nao vale pra
+      # distribuir, e nao e pra isso que serve aqui: serve pra GRAVAR as
+      # permissoes dentro do aplicativo. Logo depois o Xcode reassina por
+      # cima, uma vez so, com a autorizacao de verdade — e leva as permissoes
+      # que encontrar gravadas.
+      #
+      # POR QUE A LISTA TEM MAIS DE UM ITEM
+      # -----------------------------------
+      # application-identifier e beta-reports-active sao o que faz o
+      # TestFlight aceitar o envio. Escrevendo so a nossa, elas sumiriam e o
+      # envio seria recusado. Os valores nao sao adivinhados: sao os mesmos
+      # que o empacotamento gravou na compilacao 14, lidos de dentro do .ipa.
+      - name: Gravar o teto de memoria no arquivo compilado
+        run: |
+          set -e
+          APP=$(find construcao/app.xcarchive/Products/Applications -maxdepth 1 -name '*.app' | head -1)
+          echo "aplicativo: $APP"
+
+          python3 - <<'PY'
+          import os
+          import plistlib
+
+          nossas = plistlib.load(open("iphone.entitlements", "rb"))
+          tudo = {
+              "application-identifier": os.environ["TIME"] + "." + os.environ["BUNDLE"],
+              "com.apple.developer.team-identifier": os.environ["TIME"],
+              "beta-reports-active": True,
+              "get-task-allow": False,
+          }
+          tudo.update(nossas)
+          plistlib.dump(tudo, open("permissoes.plist", "wb"))
+          for chave in sorted(tudo):
+              print("   ", chave, "=", tudo[chave])
+          PY
+
+          echo ""
+          echo "--- gravando (assinatura ad-hoc, sem certificado):"
+          codesign --force --sign - --entitlements permissoes.plist --generate-entitlement-der "$APP"
+
+          echo ""
+          echo "--- conferindo que ficou gravado:"
+          codesign -d --entitlements :- "$APP" 2>/dev/null || true
+
       # AQUI O APP E ASSINADO, uma vez so, pra App Store.
       #
       # "signingStyle automatic" mais a chave da Apple: o Xcode cria no painel
@@ -254,79 +315,6 @@ jobs:
           empacotar app-store-connect
           ls -lh saida/*.ipa
 
-      # LIGAR O TETO DE MEMORIA, NO APLICATIVO JA ASSINADO.
-      #
-      # POR QUE AQUI E NAO NA COMPILACAO
-      # --------------------------------
-      # Este e o primeiro ponto do caminho em que existe assinatura de
-      # verdade. Antes dela nao ha onde gravar permissao nenhuma.
-      #
-      # POR QUE SOMANDO, E NUNCA SUBSTITUINDO
-      # -------------------------------------
-      # O empacotamento grava quatro permissoes, e duas delas nao sao
-      # decoracao: application-identifier e beta-reports-active sao o que faz
-      # o TestFlight aceitar o envio. Assinar so com a nossa apagaria as
-      # outras e o envio seria recusado. Por isso o passo LE o que ja esta
-      # gravado, acrescenta a nossa, e assina com o conjunto inteiro.
-      #
-      # ISTO SO FUNCIONA PORQUE A CAPACIDADE ESTA MARCADA NO IDENTIFICADOR.
-      # O perfil de assinatura carrega a lista do que e permitido; pedir algo
-      # fora dela faz o proprio codesign recusar. Marcar no painel da Apple
-      # autoriza; este passo e que usa.
-      - name: Ligar o teto de memoria
-        run: |
-          set -e
-          cd saida
-          ARQUIVO=$(ls *.ipa | head -1)
-          rm -rf remontar && mkdir remontar
-          unzip -q "$ARQUIVO" -d remontar
-          APP=$(find remontar/Payload -maxdepth 1 -name '*.app' | head -1)
-          echo "aplicativo: $APP"
-
-          echo ""
-          echo "--- o que o empacotamento tinha gravado:"
-          codesign -d --entitlements atuais.plist --xml "$APP"
-          cat atuais.plist
-
-          echo ""
-          echo "--- juntando a nossa:"
-          python3 - <<'PY'
-          import plistlib
-
-          atuais = plistlib.load(open("atuais.plist", "rb"))
-          nossas = plistlib.load(open("../iphone.entitlements", "rb"))
-          atuais.update(nossas)
-          plistlib.dump(atuais, open("finais.plist", "wb"))
-          for chave in sorted(atuais):
-              print("   ", chave, "=", atuais[chave])
-          PY
-
-          # A identidade de distribuicao foi posta no chaveiro pelo proprio
-          # empacotamento. Pegamos pela impressao digital, nao pelo nome: nome
-          # tem acento, parenteses e espaco, e ja quebrou script alheio.
-          IDENTIDADE=$(security find-identity -v -p codesigning | grep "Apple Distribution" | head -1 | awk '{print $2}')
-          if [ -z "$IDENTIDADE" ]; then
-            echo "Nao achei identidade de distribuicao no chaveiro. O que tem:"
-            security find-identity -v -p codesigning
-            exit 1
-          fi
-          echo ""
-          echo "assinando de novo com: $IDENTIDADE"
-          codesign --force --sign "$IDENTIDADE" --entitlements finais.plist --generate-entitlement-der "$APP"
-
-          # O desempacotar/reempacotar pode perder a marca de executavel do
-          # binario. Sem ela o aplicativo nao abre — e o erro apareceria so no
-          # aparelho, tarde demais.
-          chmod +x "$APP/$(basename "$APP" .app)"
-
-          # Remontar o .ipa. O zip tem que ser feito de DENTRO da pasta, com a
-          # Payload como primeiro nivel — e assim que a Apple espera.
-          rm -f "$ARQUIVO"
-          cd remontar
-          zip -qry "../$ARQUIVO" Payload
-          cd ..
-          ls -lh "$ARQUIVO"
-
       # O QUE FOI ASSINADO DE VERDADE.
       #
       # Isto nao e zelo excessivo: a permissao de memoria e pedida em DOIS
@@ -355,6 +343,10 @@ jobs:
           unzip -q "$ARQUIVO" -d conferir
           APP=$(find conferir/Payload -maxdepth 1 -name '*.app' | head -1)
           echo "aplicativo assinado: $APP"
+
+          echo ""
+          echo "--- identidades que existem na maquina (so pra registro):"
+          security find-identity -v -p codesigning || true
 
           echo ""
           echo "--- permissoes que foram REALMENTE assinadas:"
