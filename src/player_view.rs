@@ -55,6 +55,13 @@ pub struct Ivars {
     teclado_manual: Cell<Option<bool>>,
     /// O ultimo pedido do Ruffle, so pra perceber quando ele MUDA.
     pedido_anterior: Cell<bool>,
+    /// O pedido de agora nasceu sem ninguem ter tocado na tela?
+    ///
+    /// Se nasceu, fica descartado ATE O RUFFLE PEDIR DE NOVO. Antes ele so
+    /// ficava esperando, e ai o primeiro toque do jogador — em qualquer lugar,
+    /// por qualquer motivo — servia de senha e o teclado subia sozinho. Era o
+    /// "da bug no comeco" que o testador relatou.
+    pedido_ignorado: Cell<bool>,
     /// Se o teclado esta na tela AGORA. Sem isto, pediriamos pra abrir a cada
     /// quadro enquanto o cursor estivesse no campo — 60 pedidos por segundo
     /// pra uma coisa que ja esta aberta.
@@ -458,30 +465,38 @@ impl PlayerView {
         // A comparacao com o estado atual e o que impede de pedir 60 vezes
         // por segundo: so age quando a bandeira MUDA.
         if let Some(pedido) = self.ivars().teclado.get() {
-            // QUANDO O PEDIDO DO RUFFLE MUDA, O JOGADOR PERDE A PALAVRA.
+            // O PEDIDO E JULGADO QUANDO NASCE, NAO QUANDO SERIA APLICADO.
             //
-            // A escolha manual vale ate a situacao mudar. Trocou de campo,
-            // saiu do chat, entrou noutra tela — volta ao automatico, senao o
-            // jogador teria que desfazer a escolha na mao toda vez.
+            // Um pedido que aparece sem ninguem ter encostado na tela nao veio
+            // do jogador: veio do jogo pondo o cursor num campo sozinho,
+            // tipicamente durante o carregamento. Esse pedido fica DESCARTADO,
+            // e nao apenas esperando.
+            //
+            // A diferenca e tudo. Esperando, o primeiro toque do jogador em
+            // qualquer lugar da tela servia de senha e o teclado subia — ele
+            // nao tinha pedido nada. Descartado, so um pedido NOVO reabre o
+            // assunto.
+            //
+            // A MUDANCA TAMBEM DEVOLVE A PALAVRA AO AUTOMATICO. Se o jogador
+            // tinha mandado pelo botao, essa escolha vale ate a situacao
+            // mudar — trocou de campo, saiu do chat, entrou noutra tela — e
+            // ai volta ao normal, senao ele teria que desfazer na mao sempre.
             let do_ruffle = pedido.aberto();
             if do_ruffle != self.ivars().pedido_anterior.get() {
                 self.ivars().pedido_anterior.set(do_ruffle);
                 self.ivars().teclado_manual.set(None);
+                self.ivars()
+                    .pedido_ignorado
+                    .set(do_ruffle && !self.toque_recente());
             }
 
             let manual = self.ivars().teclado_manual.get();
-            let quer = manual.unwrap_or(do_ruffle);
+            let automatico = do_ruffle && !self.ivars().pedido_ignorado.get();
 
-            // ABRIR SOZINHO EXIGE TOQUE RECENTE; PELO BOTAO, NAO.
-            //
-            // Pedido que chega sem ninguem ter encostado na tela — como
-            // durante o carregamento — fica esperando. Ja o toque no botao e
-            // ordem direta e nao passa por peneira nenhuma.
-            //
-            // Fechar tambem nao passa: quem esta digitando nao esta tocando na
-            // tela, e o teclado nao pode se recusar a sumir.
-            let pode = !quer || manual.is_some() || self.toque_recente();
-            if quer != self.ivars().mostrando_teclado.get() && pode {
+            // O botao do jogador manda mais que o automatico, sempre.
+            let quer = manual.unwrap_or(automatico);
+
+            if quer != self.ivars().mostrando_teclado.get() {
                 self.ivars().mostrando_teclado.set(quer);
                 let _: bool = if quer {
                     tracing::info!("abrindo o teclado");
