@@ -331,8 +331,14 @@ impl LibraryController {
         let data = unsafe { asset.data() };
         // SAFETY: SwfMovie::from_data won't modify the NSData.
         let bytes = unsafe { data.as_bytes_unchecked() };
-        let movie =
-            SwfMovie::from_data(bytes, "file://logo-anim.swf".into(), None).expect("loading movie");
+        // O QUARTO ARGUMENTO E NOVO no Ruffle.
+        //
+        // Ele descreve um SWF carregado por Loader.loadBytes, caso em que o
+        // carregador manda na caixa de areia do carregado. Esta animacao vem
+        // de dentro do proprio aplicativo, nao foi carregada por ninguem:
+        // None e a resposta certa, nao um preenchimento.
+        let movie = SwfMovie::from_data(bytes, "file://logo-anim.swf".into(), None, None)
+            .expect("loading movie");
 
         let renderer = view.create_renderer();
 
