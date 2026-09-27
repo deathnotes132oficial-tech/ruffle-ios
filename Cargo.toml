@@ -21,7 +21,28 @@ objc2-ui-kit = "0.3.2"
 objc2-metal = "0.3.2"
 objc2-quartz-core = "0.3.2"
 
-ruffle_core = { git = "https://github.com/ruffle-rs/ruffle.git", branch = "master", features = [
+# O RUFFLE VEM DA NOSSA COPIA, NAO DA OFICIAL.
+#
+# POR QUE
+# -------
+# A cratera do DDTank saia preenchida em vez de vazada, e o buraco ainda era
+# tapado por cima: dava pra andar no ar. A causa estava no calculo do modo de
+# mistura ALPHA, dentro do Ruffle — um desvio que, onde a origem e
+# transparente, PRESERVAVA o destino em vez de apaga-lo.
+#
+# O conserto e de uma linha e mora em:
+#     render/wgpu/shaders/blend/alpha.wgsl
+#
+# Ele foi encontrado e confirmado no navegador, onde o ciclo de teste e de
+# minutos em vez de uma compilacao inteira mais o testador. O aplicativo usa
+# exatamente o mesmo codigo de desenho, entao a mesma correcao vale aqui.
+#
+# QUANDO DA PRA VOLTAR PRA OFICIAL
+# --------------------------------
+# Se um dia esse conserto entrar no Ruffle de verdade, basta trocar estas sete
+# linhas de volta para https://github.com/ruffle-rs/ruffle.git. Nada mais no
+# projeto depende da copia.
+ruffle_core = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "master", features = [
     "audio",
     "symphonia",
     "mp3",
@@ -30,16 +51,16 @@ ruffle_core = { git = "https://github.com/ruffle-rs/ruffle.git", branch = "maste
     "default_compatibility_rules",
     "default_font",
 ] }
-ruffle_render = { git = "https://github.com/ruffle-rs/ruffle.git", branch = "master" }
-ruffle_render_wgpu = { git = "https://github.com/ruffle-rs/ruffle.git", branch = "master" }
-ruffle_video = { git = "https://github.com/ruffle-rs/ruffle.git", branch = "master" }
-ruffle_video_software = { git = "https://github.com/ruffle-rs/ruffle.git", branch = "master" }
-ruffle_frontend_utils = { git = "https://github.com/ruffle-rs/ruffle.git", branch = "master", features = [
+ruffle_render = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "master" }
+ruffle_render_wgpu = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "master" }
+ruffle_video = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "master" }
+ruffle_video_software = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "master" }
+ruffle_frontend_utils = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "master", features = [
     "cpal",
     "fs",
     "navigator",
 ] }
-flv-rs = { git = "https://github.com/ruffle-rs/ruffle.git", branch = "master" }
+flv-rs = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "master" }
 
 # A VERSAO TEM QUE SER A MESMA QUE O RUFFLE USA.
 #
