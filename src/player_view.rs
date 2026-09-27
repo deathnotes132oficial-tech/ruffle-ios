@@ -17,7 +17,7 @@ use objc2_ui_kit::{
     UITouchPhase, UIView, UIViewContentMode,
 };
 use ruffle_core::events::{
-    KeyDescriptor, KeyLocation, LogicalKey, MouseButton, PhysicalKey, TextControlCode,
+    KeyDescriptor, KeyLocation, LogicalKey, MouseButton, NamedKey, PhysicalKey, TextControlCode,
 };
 use ruffle_core::{FloatDuration, Player, PlayerEvent, ViewportDimensions};
 
@@ -36,6 +36,13 @@ pub struct Ivars {
     ultima_medida: Cell<Option<Instant>>,
     /// A bandeira que o Ruffle levanta quando o jogo quer teclado.
     teclado: OnceCell<PedidoDeTeclado>,
+    /// Quando a tela foi tocada pela ultima vez.
+    ///
+    /// O teclado so sobe se houve toque ha pouco. Sem isto ele aparecia
+    /// sozinho na tela de carregamento: o jogo poe o cursor num campo de
+    /// texto durante a carga, o Ruffle avisa, e nos obedeciamos — com o
+    /// jogador sem ter tocado em nada e sem conseguir fechar.
+    ultimo_toque: Cell<Option<Instant>>,
     /// Se o teclado esta na tela AGORA. Sem isto, pediriamos pra abrir a cada
     /// quadro enquanto o cursor estivesse no campo — 60 pedidos por segundo
     /// pra uma coisa que ja esta aberta.
@@ -440,7 +447,18 @@ impl PlayerView {
         // por segundo: so age quando a bandeira MUDA.
         if let Some(pedido) = self.ivars().teclado.get() {
             let quer = pedido.aberto();
-            if quer != self.ivars().mostrando_teclado.get() {
+            // ABRIR EXIGE TOQUE RECENTE; FECHAR, NAO.
+            //
+            // O pedido de abrir so vale se o jogador encostou na tela ha
+            // pouco — foi ele quem tocou no chat. Pedido que chega sozinho,
+            // como durante o carregamento, fica esperando: se o jogador
+            // tocar depois, o teclado sobe ali.
+            //
+            // O fechar nao passa por essa peneira, de proposito. Quem esta
+            // digitando nao esta tocando na tela, e o teclado nao pode se
+            // recusar a sumir.
+            let pode = !quer || self.toque_recente();
+            if quer != self.ivars().mostrando_teclado.get() && pode {
                 self.ivars().mostrando_teclado.set(quer);
                 let _: bool = if quer {
                     tracing::info!("abrindo o teclado");
@@ -477,6 +495,17 @@ impl PlayerView {
         let _ = self.ivars().teclado.set(pedido);
     }
 
+    /// Houve toque ha pouco?
+    ///
+    /// Dois segundos: o jogo leva um instante entre receber o toque e pedir o
+    /// teclado, e uma janela curta demais perderia o pedido legitimo.
+    fn toque_recente(&self) -> bool {
+        match self.ivars().ultimo_toque.get() {
+            Some(quando) => Instant::now().duration_since(quando).as_secs() < 2,
+            None => false,
+        }
+    }
+
     /// O que foi digitado no teclado do iPhone, entregue ao jogo.
     ///
     /// Vem uma letra por vez, mas pode vir um punhado de uma vez so quando a
@@ -487,15 +516,24 @@ impl PlayerView {
         }
         let mut player_lock = self.player_lock();
         for letra in texto.chars() {
-            // A TECLA DE ENVIAR NAO E UMA LETRA.
+            // A TECLA DE ENVIAR E UMA TECLA, NAO UM COMANDO DE EDICAO.
             //
             // O teclado do iPhone manda a quebra de linha como se fosse
-            // texto. Entregue assim, ela viraria um caractere estranho dentro
-            // da mensagem em vez de envia-la. O jogo espera o Enter.
+            // texto. Antes eu a traduzia para TextControl::Enter, que e o
+            // comando de edicao "quebre a linha aqui". O campo obedecia, e o
+            // chat nao enviava nada — porque o chat escuta a TECLA, nao o
+            // comando. Por isso as letras entravam e o Enter nao fazia nada.
+            //
+            // Agora vai como tecla de verdade, apertar e soltar, pelo mesmo
+            // caminho do botao ENTER da tela. E o que um teclado fisico faria.
             if letra == '\n' || letra == '\r' {
-                player_lock.handle_event(PlayerEvent::TextControl {
-                    code: TextControlCode::Enter,
-                });
+                let tecla = KeyDescriptor {
+                    physical_key: PhysicalKey::Enter,
+                    logical_key: LogicalKey::Named(NamedKey::Enter),
+                    key_location: KeyLocation::Standard,
+                };
+                player_lock.handle_event(PlayerEvent::KeyDown { key: tecla });
+                player_lock.handle_event(PlayerEvent::KeyUp { key: tecla });
             } else {
                 player_lock.handle_event(PlayerEvent::TextInput { codepoint: letra });
             }
@@ -520,6 +558,7 @@ impl PlayerView {
     }
 
     fn handle_touches(&self, touches: &NSSet<UITouch>) -> bool {
+        self.ivars().ultimo_toque.set(Some(Instant::now()));
         let mut player_lock = self.player_lock();
 
         // Flash only supports one touch at a time, so we intentially don't set
