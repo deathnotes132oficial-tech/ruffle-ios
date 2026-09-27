@@ -41,7 +41,18 @@ ruffle_frontend_utils = { git = "https://github.com/ruffle-rs/ruffle.git", branc
 ] }
 flv-rs = { git = "https://github.com/ruffle-rs/ruffle.git", branch = "master" }
 
-wgpu = "27.0.1"
+# A VERSAO TEM QUE SER A MESMA QUE O RUFFLE USA.
+#
+# O Cargo deixa duas versoes da mesma biblioteca conviverem no programa. Isso
+# nao da erro na hora de baixar: da erro DEPOIS, na compilacao, com uma
+# mensagem que nao explica nada — "argumento incorreto" apontando pra um
+# argumento visivelmente correto. E que passam a existir dois tipos com o
+# mesmo nome, um de cada versao, e eles nao se convertem.
+#
+# Foi o que aconteceu ao atualizar o Ruffle: ele foi pra wgpu 30 e aqui
+# continuava 27. Se um dia o erro voltar nessa forma, o primeiro lugar pra
+# olhar e o Cargo.toml do Ruffle, na raiz do repositorio dele.
+wgpu = "30.0.1"
 cpal = "0.16.0"
 url = "2.5.2"
 tokio = { version = "1.40.0", features = ["rt-multi-thread", "macros"] }
