@@ -1,0 +1,92 @@
+================================================================
+  MONTAR O RUFFLE PARA IPHONE, DE GRACA, SEM MAC
+================================================================
+  escrito em 19/09/2026
+
+Tudo pelo navegador. Nao instala nada no seu computador.
+
+O que este passo responde: "o projeto do Ruffle para iPhone compila
+e vira um aplicativo?". So isso. Se der certo, existe caminho e aa
+gente decide o proximo passo. Se nao der, custou zero.
+
+
+----------------------------------------------------------------
+  1. CONTA NO GITHUB
+----------------------------------------------------------------
+
+Se ainda nao tem: github.com -> Sign up. E gratis.
+
+
+----------------------------------------------------------------
+  2. COPIAR O PROJETO PRA SUA CONTA
+----------------------------------------------------------------
+
+Abra:
+
+    https://github.com/madsmtm/ruffle-ios
+
+No canto de cima a direita, clique em FORK, e depois em
+"Create fork". Isso faz uma copia do projeto na sua conta — e e
+essa copia que voce manda compilar.
+
+IMPORTANTE: deixe a copia PUBLICA. E o que da direito aos Macs
+gratuitos do GitHub. Em projeto privado, eles sao pagos.
+
+
+----------------------------------------------------------------
+  3. CRIAR O ARQUIVO DE INSTRUCOES
+----------------------------------------------------------------
+
+Na SUA copia do projeto (o endereco vai ter o seu nome de usuario):
+
+  a) clique em "Add file" -> "Create new file";
+
+  b) no campo do nome, digite exatamente:
+
+         .github/workflows/montar.yml
+
+     (os pontos e as barras importam; ao digitar a barra, o
+      GitHub vai criando as pastas sozinho);
+
+  c) abra o arquivo montar.yml que esta nesta mesma pasta aqui
+     no seu computador, copie TODO o conteudo e cole na caixa
+     grande do GitHub;
+
+  d) clique em "Commit changes" e confirme.
+
+
+----------------------------------------------------------------
+  4. MANDAR COMPILAR
+----------------------------------------------------------------
+
+  a) na sua copia, clique na aba "Actions" (em cima);
+
+  b) se aparecer um aviso verde pedindo pra habilitar, clique em
+     "I understand my workflows, go ahead and enable them";
+
+  c) na lista da esquerda, clique em "Montar o Ruffle para iPhone";
+
+  d) a direita, clique em "Run workflow" e confirme.
+
+Comeca a rodar. Demora: a primeira vez costuma levar de 20 a 40
+minutos, porque ele baixa e compila o Rust inteiro. Pode fechar a
+aba e voltar depois.
+
+
+----------------------------------------------------------------
+  5. O QUE ACONTECEU
+----------------------------------------------------------------
+
+Clique na execucao pra acompanhar.
+
+  BOLINHA VERDE = compilou. No fim da pagina aparece um bloco
+  "Artifacts" com "ruffle-iphone". Esse e o aplicativo. Baixe e
+  guarde — o proximo passo e tentar colocar ele num aparelho.
+
+  BOLINHA VERMELHA = parou em algum lugar. Clique no passo que
+  ficou vermelho, copie o final do texto e me mande. O erro diz
+  exatamente onde travou.
+
+Nos dois casos me avise. Verde e vermelho sao os dois resultados
+que eu preciso ver — um abre o caminho, o outro fecha, e os dois
+custaram zero.

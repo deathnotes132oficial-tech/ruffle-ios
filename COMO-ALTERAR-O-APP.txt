@@ -1,0 +1,100 @@
+================================================================
+  ALTERAR O APLICATIVO PRA ABRIR O JOGO DIRETO
+================================================================
+  escrito em 19/09/2026
+
+O QUE MUDA
+----------
+Hoje o aplicativo so abre arquivo .swf que voce entrega pra ele. O
+DDTank precisa de mais que o arquivo: precisa de usuario e chave, e
+o Ruffle nao le isso do endereco sozinho.
+
+Com esta alteracao ele passa a aceitar o endereco do jogo INTEIRO,
+com usuario e chave, e abrir direto. Some o abrir.swf e some junto
+o problema do bytecode que travou o teste de hoje.
+
+Duas formas de entrega:
+
+  http://servidor/Loading.swf?user=fulano&key=abc
+      direto, do jeito que o jogo entrega
+
+  deathnote://jogar?u=<o endereco acima, codificado>
+      um esquema proprio, que faz um botao numa pagina da internet
+      abrir o jogo dentro do aplicativo — o iPhone nao deixa link
+      comum fazer isso
+
+
+SAO DUAS EDICOES NO GITHUB
+==========================
+
+--------------------------------------------------------------
+  1. src/scene_delegate.rs   (substituir inteiro)
+--------------------------------------------------------------
+
+  a) na sua copia, va em Code -> src -> scene_delegate.rs
+  b) clique no lapis
+  c) Ctrl+A, apaga
+  d) cole o conteudo de RUFFLE-IOS/scene_delegate.rs
+  e) Commit changes
+
+
+--------------------------------------------------------------
+  2. Info.plist   (acrescentar um pedaco)
+--------------------------------------------------------------
+
+  a) na sua copia, va em Code -> Info.plist
+  b) clique no lapis
+  c) role ate o FIM do arquivo. As ultimas linhas sao:
+
+         </dict>
+         </plist>
+
+  d) cole o pedaco abaixo LOGO ANTES daquele </dict> final
+     (ou seja, entre a ultima linha de conteudo e o </dict>):
+
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.deathnote.jogo</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>deathnote</string>
+			</array>
+		</dict>
+	</array>
+
+  e) Commit changes
+
+Isso e o que registra o "deathnote://" no sistema. Sem ele, o
+iPhone nao sabe que este aplicativo atende esse tipo de endereco.
+
+
+DEPOIS DAS DUAS EDICOES
+=======================
+
+Actions -> Rodar no simulador -> Run workflow, e no campo de texto
+cole o endereco do JOGO (nao mais o do abrir.swf):
+
+  1. RODAR-TESTE.bat -> PEGAR LINK PRO RUFFLE -> entra com a conta
+  2. LINK-PRO-CELULAR.bat -> ele copia o endereco pra area de
+     transferencia
+  3. cola esse endereco no campo do Run workflow
+
+ATENCAO: o processo do GitHub hoje BAIXA o endereco e trata como
+arquivo. Pra esta nova forma ele precisa ENTREGAR o endereco. Eu
+mando o processo ajustado junto.
+
+
+O QUE PODE DAR ERRADO
+=====================
+
+A alteracao usa tres coisas do codigo do Ruffle que eu li mas nao
+consigo compilar aqui: PlayerOptions, PlayingContent e o construtor
+PlayerController::new. Se algum nome ou formato estiver diferente,
+a compilacao reclama e o erro diz exatamente o quê — e ai e ajuste
+de uma ou duas linhas.
+
+Nao se assuste com vermelho na primeira tentativa. Compilar codigo
+que eu nao posso rodar aqui e assim mesmo: o compilador vira o
+nosso revisor.
