@@ -23,7 +23,9 @@ use objc2_ui_kit::{
 use ruffle_core::backend::navigator::OwnedFuture;
 use ruffle_core::backend::storage::StorageBackend;
 use ruffle_core::config::Letterbox;
-use ruffle_core::events::{KeyDescriptor, KeyLocation, LogicalKey, MouseButton, PhysicalKey};
+use ruffle_core::events::{
+    KeyDescriptor, KeyLocation, LogicalKey, MouseButton, NamedKey, PhysicalKey,
+};
 use ruffle_core::{LoadBehavior, Player, PlayerBuilder, PlayerEvent};
 use ruffle_frontend_utils::backends::audio::CpalAudioBackend;
 use ruffle_frontend_utils::backends::navigator::{
@@ -955,6 +957,23 @@ impl PlayerController {
         }
     }
 
+    /// O nome da tecla, pras que nao produzem caractere.
+    ///
+    /// So estas precisam: as outras sao identificadas pelo caractere que
+    /// geram, e o caminho do caractere ja funcionava.
+    fn nome_da_tecla(fisica: PhysicalKey) -> Option<NamedKey> {
+        Some(match fisica {
+            PhysicalKey::ArrowLeft => NamedKey::ArrowLeft,
+            PhysicalKey::ArrowUp => NamedKey::ArrowUp,
+            PhysicalKey::ArrowRight => NamedKey::ArrowRight,
+            PhysicalKey::ArrowDown => NamedKey::ArrowDown,
+            PhysicalKey::Escape => NamedKey::Escape,
+            PhysicalKey::Tab => NamedKey::Tab,
+            PhysicalKey::Enter => NamedKey::Enter,
+            _ => return None,
+        })
+    }
+
     /// Manda a tecla pro jogo, como se fosse um teclado de verdade.
     fn mandar_tecla(&self, indice: isize, apertando: bool) {
         let ficha = if (LIVRE_0..LIVRE_0 + LIVRES as isize).contains(&indice) {
@@ -967,10 +986,27 @@ impl PlayerController {
         let Some((_, fisica, caractere)) = ficha else {
             return;
         };
-        let logica = if caractere == '\u{0}' {
-            LogicalKey::Unknown
-        } else {
-            LogicalKey::Character(caractere)
+        // A TECLA QUE O JOGO REALMENTE LE E A LOGICA, NAO A FISICA.
+        //
+        // O Ruffle monta o codigo de tecla do Flash a partir da tecla logica
+        // (input.rs: KeyCodeMappingType::Logical). A fisica, que a tabela
+        // acima preenche com tanto cuidado, nao entra nessa conta.
+        //
+        // Era por isso que SO AS SETAS nao funcionavam. Elas nao produzem
+        // caractere nenhum, entao caiam em LogicalKey::Unknown — que nao vira
+        // codigo de tecla, e o Ruffle DESCARTA o evento antes de o jogo ver.
+        // O espaco e os numeros escapavam porque tem caractere: ' ' vira
+        // KeyCode::SPACE, '1' vira KeyCode::NUMBER_1.
+        //
+        // Quem nao tem caractere tem NOME. Named(ArrowLeft) vira KeyCode::LEFT,
+        // que e o 37 que o DDTank espera pra mirar.
+        //
+        // ESC, TAB e ENTER estavam quebrados pelo mesmo motivo e ninguem tinha
+        // notado — o ENTER mandava '\r', que tambem nao vira codigo nenhum.
+        let logica = match Self::nome_da_tecla(fisica) {
+            Some(nome) => LogicalKey::Named(nome),
+            None if caractere == '\u{0}' => LogicalKey::Unknown,
+            None => LogicalKey::Character(caractere),
         };
         let key = KeyDescriptor {
             physical_key: fisica,
