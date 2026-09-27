@@ -106,16 +106,22 @@ jobs:
       # numero repetido, e o do projeto e fixo: sem isto, o segundo envio
       # falharia com "ja existe uma compilacao com esse numero".
       #
-      # CODE_SIGN_ENTITLEMENTS: a NOSSA lista, nao a do projeto.
+      # CODE_SIGN_ENTITLEMENTS VAZIO, E AQUI NAO ADIANTA SER OUTRA COISA.
       #
-      # O ruffle-ios.entitlements que vem com o projeto pede permissoes que so
-      # existem no macOS (app-sandbox, arquivos, rede) e derruba a assinatura
-      # no iPhone — por isso aqui passava VAZIO. Agora passa o iphone.entitlements,
-      # que tem UM item so e valido no iPhone: o teto de memoria aumentado.
+      # O ruffle-ios.entitlements do projeto pede permissoes que so existem no
+      # macOS (app-sandbox, arquivos, rede) e derruba a assinatura no iPhone.
+      # No iOS o acesso a rede ja e livre, entao nao se perde nada.
       #
-      # O que NAO se perde: no iOS o acesso a rede ja e livre, e a caixa de
-      # areia e obrigatoria de qualquer jeito. Nada do que o projeto pedia
-      # fazia falta aqui.
+      # E NAO ADIANTA PENDURAR A NOSSA LISTA AQUI. Ja foi tentado: com
+      # CODE_SIGNING_ALLOWED=NO o Xcode pula a etapa que grava as permissoes
+      # no binario, e o arquivo apontado aqui nunca chega a ser lido. O
+      # aplicativo sai assinado com o conjunto minimo, calado, e so olhando
+      # dentro do .ipa depois e que isso aparece — foi assim que a primeira
+      # tentativa passou batido e chegou no aparelho do testador sem o teto
+      # de memoria.
+      #
+      # Quem liga a permissao e o passo "Ligar o teto de memoria", depois do
+      # empacotamento, onde a assinatura existe de verdade.
       #
       # A TELA DEITADA: o projeto tem GENERATE_INFOPLIST_FILE = YES, e nesse
       # modo o Xcode MISTURA as configuracoes INFOPLIST_KEY_* por cima do
@@ -142,7 +148,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY= \
-            CODE_SIGN_ENTITLEMENTS=iphone.entitlements \
+            CODE_SIGN_ENTITLEMENTS= \
             PRODUCT_BUNDLE_IDENTIFIER=$BUNDLE \
             MARKETING_VERSION=1.0 \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
@@ -248,6 +254,79 @@ jobs:
           empacotar app-store-connect
           ls -lh saida/*.ipa
 
+      # LIGAR O TETO DE MEMORIA, NO APLICATIVO JA ASSINADO.
+      #
+      # POR QUE AQUI E NAO NA COMPILACAO
+      # --------------------------------
+      # Este e o primeiro ponto do caminho em que existe assinatura de
+      # verdade. Antes dela nao ha onde gravar permissao nenhuma.
+      #
+      # POR QUE SOMANDO, E NUNCA SUBSTITUINDO
+      # -------------------------------------
+      # O empacotamento grava quatro permissoes, e duas delas nao sao
+      # decoracao: application-identifier e beta-reports-active sao o que faz
+      # o TestFlight aceitar o envio. Assinar so com a nossa apagaria as
+      # outras e o envio seria recusado. Por isso o passo LE o que ja esta
+      # gravado, acrescenta a nossa, e assina com o conjunto inteiro.
+      #
+      # ISTO SO FUNCIONA PORQUE A CAPACIDADE ESTA MARCADA NO IDENTIFICADOR.
+      # O perfil de assinatura carrega a lista do que e permitido; pedir algo
+      # fora dela faz o proprio codesign recusar. Marcar no painel da Apple
+      # autoriza; este passo e que usa.
+      - name: Ligar o teto de memoria
+        run: |
+          set -e
+          cd saida
+          ARQUIVO=$(ls *.ipa | head -1)
+          rm -rf remontar && mkdir remontar
+          unzip -q "$ARQUIVO" -d remontar
+          APP=$(find remontar/Payload -maxdepth 1 -name '*.app' | head -1)
+          echo "aplicativo: $APP"
+
+          echo ""
+          echo "--- o que o empacotamento tinha gravado:"
+          codesign -d --entitlements atuais.plist --xml "$APP"
+          cat atuais.plist
+
+          echo ""
+          echo "--- juntando a nossa:"
+          python3 - <<'PY'
+          import plistlib
+
+          atuais = plistlib.load(open("atuais.plist", "rb"))
+          nossas = plistlib.load(open("../iphone.entitlements", "rb"))
+          atuais.update(nossas)
+          plistlib.dump(atuais, open("finais.plist", "wb"))
+          for chave in sorted(atuais):
+              print("   ", chave, "=", atuais[chave])
+          PY
+
+          # A identidade de distribuicao foi posta no chaveiro pelo proprio
+          # empacotamento. Pegamos pela impressao digital, nao pelo nome: nome
+          # tem acento, parenteses e espaco, e ja quebrou script alheio.
+          IDENTIDADE=$(security find-identity -v -p codesigning | grep "Apple Distribution" | head -1 | awk '{print $2}')
+          if [ -z "$IDENTIDADE" ]; then
+            echo "Nao achei identidade de distribuicao no chaveiro. O que tem:"
+            security find-identity -v -p codesigning
+            exit 1
+          fi
+          echo ""
+          echo "assinando de novo com: $IDENTIDADE"
+          codesign --force --sign "$IDENTIDADE" --entitlements finais.plist --generate-entitlement-der "$APP"
+
+          # O desempacotar/reempacotar pode perder a marca de executavel do
+          # binario. Sem ela o aplicativo nao abre — e o erro apareceria so no
+          # aparelho, tarde demais.
+          chmod +x "$APP/$(basename "$APP" .app)"
+
+          # Remontar o .ipa. O zip tem que ser feito de DENTRO da pasta, com a
+          # Payload como primeiro nivel — e assim que a Apple espera.
+          rm -f "$ARQUIVO"
+          cd remontar
+          zip -qry "../$ARQUIVO" Payload
+          cd ..
+          ls -lh "$ARQUIVO"
+
       # O QUE FOI ASSINADO DE VERDADE.
       #
       # Isto nao e zelo excessivo: a permissao de memoria e pedida em DOIS
@@ -258,8 +337,16 @@ jobs:
       # teto antigo, calado. Descobrir isso pelo aparelho do testador custaria
       # um ciclo inteiro dele; aqui custa dois segundos.
       #
-      # NAO FALHA O ENVIO. A permissao e um extra: se ela nao entrou, o resto
-      # da compilacao continua valendo e o aviso fica no registro.
+      # ESTE PASSO BARRA O ENVIO.
+      #
+      # Antes ele so avisava, porque a permissao era considerada um extra. Nao
+      # e mais: ela e o motivo desta compilacao existir. Uma versao sem ela
+      # chegando ao TestFlight significa o testador gastando o tempo dele
+      # repetindo um teste que ja sabemos que vai fechar — foi exatamente o
+      # que aconteceu da ultima vez.
+      #
+      # Falhando aqui, nada e enviado e ninguem e incomodado. O .ipa continua
+      # guardado pra baixar e conferir na mao.
       - name: Conferir a permissao de memoria
         run: |
           cd saida
@@ -278,9 +365,14 @@ jobs:
             echo "OK: o teto de memoria aumentado ESTA no aplicativo."
           else
             echo "AVISO: o teto de memoria aumentado NAO entrou."
-            echo "Falta marcar 'Increased Memory Limit' no identificador"
-            echo "$BUNDLE, em developer.apple.com > Identifiers."
-            echo "O envio continua: isto nao impede nada, so nao ajuda."
+            echo ""
+            echo "Onde procurar, nesta ordem:"
+            echo "  1. o passo 'Ligar o teto de memoria' acima falhou?"
+            echo "  2. 'Increased Memory Limit' esta marcado no identificador"
+            echo "     $BUNDLE, em developer.apple.com > Identifiers?"
+            echo ""
+            echo "PARANDO AQUI. Nada vai pro TestFlight sem a permissao."
+            exit 1
           fi
           cd ..
 
