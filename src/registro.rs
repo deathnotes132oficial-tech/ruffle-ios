@@ -35,6 +35,7 @@ use std::io::Write;
 use std::panic;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// A marca de quebra do Ruffle. Continua existindo: quando ela aparece, o
@@ -104,6 +105,48 @@ fn relogio(epoca: u64) -> (i64, i64, i64, u64, u64, u64) {
     let ano = yoe + era * 400 + if mes <= 2 { 1 } else { 0 };
 
     (ano, mes, dia, hora / 3600, (hora % 3600) / 60, hora % 60)
+}
+
+// A MEMORIA DO LADO DO METAL.
+//
+// Tudo que medimos ate aqui conta o que o Ruffle ACHA que tem. Se a base
+// continuar em 4,8 GB com a contagem de malhas baixa, isso so tira o Ruffle da
+// lista de suspeitos — nao diz pra onde a memoria foi, e descobrir custaria
+// outra compilacao de quem testa.
+//
+// O Metal responde direto. currentAllocatedSize e todo byte que a GPU alocou:
+// texturas, vertices, alvos de desenho, tenha pedido quem tiver pedido. Com
+// esse numero ao lado do "usado", a divisao deixa de ser deducao:
+//
+//   usado alto e metal alto  -> e grafico, seguimos em malha e textura
+//   usado alto e metal baixo -> e do lado da CPU (bytes de SWF, objetos do
+//                               ActionScript, ou triangulacao guardada la)
+//
+// RESSALVA HONESTA: o aparelho tem uma GPU so, e pedir o dispositivo padrao
+// devolve o mesmo que o Ruffle usa. Se por algum motivo devolver outro, este
+// numero vem perto de zero — e ai o proprio zero avisa que a medida nao serve,
+// em vez de mentir um valor plausivel.
+#[link(name = "Metal", kind = "framework")]
+unsafe extern "C" {
+    fn MTLCreateSystemDefaultDevice() -> *mut objc2::runtime::AnyObject;
+}
+
+/// O dispositivo grafico, pedido uma vez e guardado.
+fn dispositivo_do_metal() -> Option<&'static objc2::runtime::AnyObject> {
+    static DISPOSITIVO: OnceLock<usize> = OnceLock::new();
+    let ponteiro = *DISPOSITIVO.get_or_init(|| unsafe { MTLCreateSystemDefaultDevice() as usize });
+    if ponteiro == 0 {
+        return None;
+    }
+    // Vive pelo resto do programa: foi criado uma vez e nunca e devolvido.
+    Some(unsafe { &*(ponteiro as *const objc2::runtime::AnyObject) })
+}
+
+/// Quantos MB a GPU tem alocados agora.
+pub fn memoria_do_metal_mb() -> Option<u64> {
+    let dispositivo = dispositivo_do_metal()?;
+    let bytes: usize = unsafe { objc2::msg_send![dispositivo, currentAllocatedSize] };
+    Some((bytes / (1024 * 1024)) as u64)
 }
 
 /// Quanto tempo o aplicativo esta de pe, escrito pra ler.
@@ -283,8 +326,13 @@ pub fn anotar_memoria(contagem: Option<(usize, usize, usize, usize, usize, usize
         .unwrap_or(0);
     let ligado = tempo_ligado(epoca);
 
+    let metal = match memoria_do_metal_mb() {
+        Some(mb) => format!(" | metal {mb} MB"),
+        None => String::new(),
+    };
+
     anotar(&format!(
-        "memoria livre: {mb} MB | usado {usado} MB | minimo {menor} MB{ligado}{numeros}"
+        "memoria livre: {mb} MB | usado {usado} MB | minimo {menor} MB{metal}{ligado}{numeros}"
     ));
 }
 
