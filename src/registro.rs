@@ -298,7 +298,7 @@ static MENOR_FOLGA: AtomicU64 = AtomicU64::new(u64::MAX);
 ///
 /// Os contadores do Ruffle vem de fora porque so quem tem o jogo em maos
 /// consegue perguntar a ele.
-pub fn anotar_memoria(contagem: Option<(usize, usize, usize, usize, usize, usize, usize)>) {
+pub fn anotar_memoria(contagem: Option<String>) {
     let Some(mb) = memoria_livre_mb() else {
         anotar("memoria livre: indisponivel (simulador)");
         return;
@@ -313,10 +313,13 @@ pub fn anotar_memoria(contagem: Option<(usize, usize, usize, usize, usize, usize
 
     let menor = MENOR_FOLGA.fetch_min(mb, Ordering::Relaxed).min(mb);
 
+    // A LINHA VEM PRONTA DO RUFFLE, DE PROPOSITO.
+    //
+    // Quem sabe o que existe pra contar e ele. Recebendo os numeros soltos,
+    // toda medida nova obrigava a mexer nos dois repositorios; recebendo o
+    // texto, ela mexe so no dele.
     let numeros = match contagem {
-        Some((swfs, figuras, carregamentos, segurando, texturas, texturas_mb, malhas)) => format!(
-            " | swfs {swfs} figuras {figuras} carreg {carregamentos} segurando {segurando} | texturas {texturas} ({texturas_mb} MB) malhas {malhas}"
-        ),
+        Some(texto) => format!(" | {texto}"),
         None => String::new(),
     };
 
