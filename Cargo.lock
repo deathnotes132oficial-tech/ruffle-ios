@@ -130,7 +130,7 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 [[package]]
 name = "asc"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 dependencies = [
  "anyhow",
 ]
@@ -256,7 +256,7 @@ dependencies = [
 [[package]]
 name = "build_playerglobal"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 dependencies = [
  "asc",
  "clap",
@@ -265,7 +265,7 @@ dependencies = [
  "quote",
  "rascal",
  "regex",
- "swf 0.3.0 (git+https://github.com/ruffle-rs/ruffle.git?branch=master)",
+ "swf 0.3.0 (git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master)",
  "walkdir",
 ]
 
@@ -1049,7 +1049,7 @@ dependencies = [
 [[package]]
 name = "flv-rs"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 dependencies = [
  "bitflags 2.13.2",
  "thiserror 2.0.18",
@@ -2072,7 +2072,7 @@ dependencies = [
 [[package]]
 name = "naga-agal"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 dependencies = [
  "bitflags 2.13.2",
  "naga",
@@ -2083,7 +2083,7 @@ dependencies = [
 [[package]]
 name = "naga-pixelbender"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 dependencies = [
  "anyhow",
  "naga",
@@ -2631,7 +2631,7 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 [[package]]
 name = "pixel_bender"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 dependencies = [
  "byteorder",
  "num-derive",
@@ -3013,7 +3013,7 @@ dependencies = [
 [[package]]
 name = "ruffle_common"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 dependencies = [
  "fnv",
  "gc-arena",
@@ -3022,7 +3022,7 @@ dependencies = [
  "regress",
  "ruffle_macros",
  "ruffle_wstr",
- "swf 0.3.0 (git+https://github.com/ruffle-rs/ruffle.git?branch=master)",
+ "swf 0.3.0 (git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master)",
  "thiserror 2.0.18",
  "tracing",
  "url",
@@ -3031,7 +3031,7 @@ dependencies = [
 [[package]]
 name = "ruffle_core"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 dependencies = [
  "async-channel",
  "bitflags 2.13.2",
@@ -3079,7 +3079,7 @@ dependencies = [
  "serde_json",
  "slotmap",
  "smallvec",
- "swf 0.3.0 (git+https://github.com/ruffle-rs/ruffle.git?branch=master)",
+ "swf 0.3.0 (git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master)",
  "symphonia",
  "thiserror 2.0.18",
  "tracing",
@@ -3094,7 +3094,7 @@ dependencies = [
 [[package]]
 name = "ruffle_frontend_utils"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 dependencies = [
  "async-channel",
  "async-io",
@@ -3116,7 +3116,7 @@ dependencies = [
 [[package]]
 name = "ruffle_macros"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3126,7 +3126,7 @@ dependencies = [
 [[package]]
 name = "ruffle_render"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 dependencies = [
  "byteorder",
  "enum-map",
@@ -3146,7 +3146,7 @@ dependencies = [
  "png",
  "ruffle_wstr",
  "smallvec",
- "swf 0.3.0 (git+https://github.com/ruffle-rs/ruffle.git?branch=master)",
+ "swf 0.3.0 (git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master)",
  "thiserror 2.0.18",
  "tracing",
  "wgpu",
@@ -3155,7 +3155,7 @@ dependencies = [
 [[package]]
 name = "ruffle_render_wgpu"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 dependencies = [
  "bytemuck",
  "enum-map",
@@ -3169,7 +3169,7 @@ dependencies = [
  "naga-pixelbender",
  "ruffle_render",
  "smallvec",
- "swf 0.3.0 (git+https://github.com/ruffle-rs/ruffle.git?branch=master)",
+ "swf 0.3.0 (git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master)",
  "tracing",
  "web-sys",
  "wgpu",
@@ -3179,18 +3179,18 @@ dependencies = [
 [[package]]
 name = "ruffle_video"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 dependencies = [
  "ruffle_render",
  "slotmap",
- "swf 0.3.0 (git+https://github.com/ruffle-rs/ruffle.git?branch=master)",
+ "swf 0.3.0 (git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master)",
  "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "ruffle_video_software"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 dependencies = [
  "flate2",
  "h263-rs",
@@ -3202,14 +3202,14 @@ dependencies = [
  "ruffle_render",
  "ruffle_video",
  "slotmap",
- "swf 0.3.0 (git+https://github.com/ruffle-rs/ruffle.git?branch=master)",
+ "swf 0.3.0 (git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master)",
  "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "ruffle_wstr"
 version = "0.6.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 
 [[package]]
 name = "rustc-hash"
@@ -3555,7 +3555,7 @@ dependencies = [
 [[package]]
 name = "swf"
 version = "0.3.0"
-source = "git+https://github.com/ruffle-rs/ruffle.git?branch=master#e2643c2d1488f411afbd87852b6bed491cd3b738"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#e66fe12d149062f743ddf9f909d6b6c319015c45"
 dependencies = [
  "bitflags 2.13.2",
  "bitstream-io",
