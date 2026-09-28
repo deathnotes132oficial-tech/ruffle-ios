@@ -34,6 +34,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::panic;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// A marca de quebra do Ruffle. Continua existindo: quando ela aparece, o
@@ -169,11 +170,72 @@ pub fn memoria_livre_mb() -> Option<u64> {
     }
 }
 
+// O QUE A MEDIDA ANTERIOR NAO RESPONDIA
+// -------------------------------------
+// Ate aqui o registro dizia so quanto SOBRAVA. Com isso nao da pra separar
+// duas mortes diferentes:
+//
+//   - o aplicativo cresceu e bateu no proprio teto;
+//   - o aparelho inteiro ficou apertado e o iOS escolheu matar o maior
+//     consumidor, mesmo com o teto dele ainda longe.
+//
+// A ultima sessao morreu com 1723 MB de folga, o que torna a segunda hipotese
+// possivel — e as duas pedem consertos opostos. Entao agora cada linha traz:
+//
+//   USADO    quanto o aplicativo cresceu desde que abriu (folga inicial menos
+//            a de agora). Nao precisa de conta do sistema: e subtracao.
+//   MINIMO   a menor folga ja vista. Morrer logo depois de um minimo baixo e
+//            outra historia de morrer com folga de sobra.
+//   SWFS     os contadores do Ruffle, os mesmos que a caixa mostra no
+//            navegador, pra confirmar NO APARELHO que o vazamento sumiu.
+//
+// E ha ainda o aviso do iOS, anotado de outro lugar (player_controller).
+
+/// A folga do primeiro instante, pra saber o quanto o aplicativo cresceu.
+static FOLGA_INICIAL: AtomicU64 = AtomicU64::new(0);
+/// A menor folga ja vista nesta sessao.
+static MENOR_FOLGA: AtomicU64 = AtomicU64::new(u64::MAX);
+
 /// Anota a memoria restante. Chamada de tempos em tempos pelo laco do jogo.
-pub fn anotar_memoria() {
+///
+/// Os contadores do Ruffle vem de fora porque so quem tem o jogo em maos
+/// consegue perguntar a ele.
+pub fn anotar_memoria(contagem: Option<(usize, usize, usize, usize)>) {
+    let Some(mb) = memoria_livre_mb() else {
+        anotar("memoria livre: indisponivel (simulador)");
+        return;
+    };
+
+    let inicial = FOLGA_INICIAL.load(Ordering::Relaxed);
+    if inicial == 0 {
+        FOLGA_INICIAL.store(mb, Ordering::Relaxed);
+    }
+    let inicial = if inicial == 0 { mb } else { inicial };
+    let usado = inicial.saturating_sub(mb);
+
+    let menor = MENOR_FOLGA.fetch_min(mb, Ordering::Relaxed).min(mb);
+
+    let numeros = match contagem {
+        Some((swfs, figuras, carregamentos, segurando)) => format!(
+            " | swfs {swfs} figuras {figuras} carreg {carregamentos} segurando {segurando}"
+        ),
+        None => String::new(),
+    };
+
+    anotar(&format!(
+        "memoria livre: {mb} MB | usado {usado} MB | minimo {menor} MB{numeros}"
+    ));
+}
+
+/// O iOS avisou que a memoria esta apertando.
+///
+/// ESTE AVISO E A RESPOSTA QUE FALTAVA. Se ele aparecer antes da morte, foi o
+/// aparelho que apertou e o sistema escolheu a maior vitima. Se a sessao
+/// terminar sem nenhum, o aplicativo estourou sozinho.
+pub fn anotar_aviso_de_memoria() {
     match memoria_livre_mb() {
-        Some(mb) => anotar(&format!("memoria livre: {mb} MB")),
-        None => anotar("memoria livre: indisponivel (simulador)"),
+        Some(mb) => anotar(&format!("AVISO DE MEMORIA DO IOS (folga: {mb} MB)")),
+        None => anotar("AVISO DE MEMORIA DO IOS"),
     }
 }
 

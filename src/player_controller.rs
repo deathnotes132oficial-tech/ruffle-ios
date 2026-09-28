@@ -337,6 +337,22 @@ define_class!(
     /// UIResponder
     #[allow(non_snake_case)]
     impl PlayerController {
+        // O AVISO DE PRESSAO DE MEMORIA DO IOS.
+        //
+        // O sistema chama isto quando o aparelho comeca a apertar, ANTES de
+        // matar alguem. Ate hoje a gente ignorava — e e justamente o aviso que
+        // separa "o aplicativo estourou o proprio teto" de "o aparelho ficou
+        // sem RAM e o sistema escolheu a maior vitima".
+        //
+        // Nao ha o que fazer aqui alem de anotar: o Ruffle nao tem como
+        // devolver memoria sob demanda. Mas a anotacao aponta o caminho do
+        // conserto, e sem ela a gente continuaria adivinhando.
+        #[unsafe(method(didReceiveMemoryWarning))]
+        fn didReceiveMemoryWarning(&self) {
+            let _: () = unsafe { msg_send![super(self), didReceiveMemoryWarning] };
+            crate::registro::anotar_aviso_de_memoria();
+        }
+
         #[unsafe(method(canBecomeFirstResponder))]
         fn canBecomeFirstResponder(&self) -> bool {
             true

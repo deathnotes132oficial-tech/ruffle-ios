@@ -450,14 +450,31 @@ impl PlayerView {
         // ultimas linhas do registro vao mostrar a queda ate perto de
         // zero; se morrer de outra coisa, vao mostrar folga — e nos dois
         // casos a resposta esta la, sem precisar de mais um teste.
+        // MAIS RAPIDO QUANDO APERTA.
+        //
+        // De dois em dois segundos basta enquanto sobra memoria, e enche o
+        // registro de linhas iguais. Mas o mergulho final acontece DENTRO de
+        // um desses intervalos: a sessao passada oscilava 900 MB entre duas
+        // medidas, e a morte coube no meio.
+        //
+        // Abaixo de 1,5 GB de folga a medida passa a ser oito vezes por
+        // segundo. E o pedaco que interessa, e so ele.
         let agora = Instant::now();
+        let folga = crate::registro::memoria_livre_mb().unwrap_or(u64::MAX);
+        let intervalo = if folga < 1500 { 125 } else { 2000 };
         let medir = match self.ivars().ultima_medida.get() {
             None => true,
-            Some(antes) => agora.duration_since(antes).as_secs() >= 2,
+            Some(antes) => agora.duration_since(antes).as_millis() >= intervalo,
         };
         if medir {
             self.ivars().ultima_medida.set(Some(agora));
-            crate::registro::anotar_memoria();
+            // Os contadores do Ruffle so existem depois que o jogo sobe.
+            let contagem = if self.ivars().player.get().is_some() {
+                Some(self.player_lock().contagem_biblioteca())
+            } else {
+                None
+            };
+            crate::registro::anotar_memoria(contagem);
         }
 
         // O TECLADO, SE O JOGO PEDIU.
