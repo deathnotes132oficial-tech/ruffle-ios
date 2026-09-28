@@ -73,6 +73,49 @@ fn caminho_anterior() -> Option<PathBuf> {
 /// Escreve SEM guardar nada em memoria de passagem. Isso importa: o processo
 /// pode ser morto a qualquer instante, e o que nao tiver saido ja estaria
 /// perdido — justamente nas ultimas linhas, que sao as que interessam.
+/// O fuso de Brasilia, em segundos.
+///
+/// O registro e lido por gente daqui, e hora em UTC obrigaria a fazer a conta
+/// de cabeca justamente na hora em que se esta tentando entender uma morte. O
+/// Brasil nao tem mais horario de verao, entao um numero fixo basta.
+const FUSO: i64 = -3 * 3600;
+
+/// Quando esta sessao abriu, em segundos desde 1970. Zero antes de abrir.
+static INICIO_DA_SESSAO: AtomicU64 = AtomicU64::new(0);
+
+/// Quebra os segundos desde 1970 em data e hora daqui.
+///
+/// A conta de dias pra ano/mes/dia e a do Howard Hinnant, a mesma que as
+/// bibliotecas de data usam por dentro. Vale pra qualquer data; nao ha caso
+/// especial de ano bissexto pra lembrar.
+fn relogio(epoca: u64) -> (i64, i64, i64, u64, u64, u64) {
+    let local = epoca as i64 + FUSO;
+    let dias = local.div_euclid(86400);
+    let hora = local.rem_euclid(86400) as u64;
+
+    let z = dias + 719468;
+    let era = z.div_euclid(146097);
+    let doe = z.rem_euclid(146097);
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let dia = doy - (153 * mp + 2) / 5 + 1;
+    let mes = if mp < 10 { mp + 3 } else { mp - 9 };
+    let ano = yoe + era * 400 + if mes <= 2 { 1 } else { 0 };
+
+    (ano, mes, dia, hora / 3600, (hora % 3600) / 60, hora % 60)
+}
+
+/// Quanto tempo o aplicativo esta de pe, escrito pra ler.
+fn tempo_ligado(agora: u64) -> String {
+    let inicio = INICIO_DA_SESSAO.load(Ordering::Relaxed);
+    if inicio == 0 || agora < inicio {
+        return String::new();
+    }
+    let total = agora - inicio;
+    format!(" | ligado {}m{:02}s", total / 60, total % 60)
+}
+
 pub fn anotar(texto: &str) {
     let Some(alvo) = caminho_atual() else { return };
 
@@ -89,11 +132,13 @@ pub fn anotar(texto: &str) {
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
+    let (_, _, _, h, m, s) = relogio(segundos);
+
     if let Ok(mut arquivo) = OpenOptions::new().create(true).append(true).open(&alvo) {
         if recomecou {
-            let _ = writeln!(arquivo, "[{segundos}] (registro recomecado por tamanho)");
+            let _ = writeln!(arquivo, "[{h:02}:{m:02}:{s:02}] (registro recomecado por tamanho)");
         }
-        let _ = writeln!(arquivo, "[{segundos}] {texto}");
+        let _ = writeln!(arquivo, "[{h:02}:{m:02}:{s:02}] {texto}");
     }
 }
 
@@ -111,7 +156,17 @@ pub fn iniciar_sessao() {
     }
 
     instalar_gancho();
-    anotar("sessao aberta");
+
+    let agora = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    INICIO_DA_SESSAO.store(agora, Ordering::Relaxed);
+
+    let (ano, mes, dia, h, m, s) = relogio(agora);
+    anotar(&format!(
+        "sessao aberta em {dia:02}/{mes:02}/{ano} as {h:02}:{m:02}:{s:02}"
+    ));
 }
 
 /// Passa a anotar toda quebra do programa.
@@ -200,7 +255,7 @@ static MENOR_FOLGA: AtomicU64 = AtomicU64::new(u64::MAX);
 ///
 /// Os contadores do Ruffle vem de fora porque so quem tem o jogo em maos
 /// consegue perguntar a ele.
-pub fn anotar_memoria(contagem: Option<(usize, usize, usize, usize, usize, usize)>) {
+pub fn anotar_memoria(contagem: Option<(usize, usize, usize, usize, usize, usize, usize)>) {
     let Some(mb) = memoria_livre_mb() else {
         anotar("memoria livre: indisponivel (simulador)");
         return;
@@ -216,14 +271,20 @@ pub fn anotar_memoria(contagem: Option<(usize, usize, usize, usize, usize, usize
     let menor = MENOR_FOLGA.fetch_min(mb, Ordering::Relaxed).min(mb);
 
     let numeros = match contagem {
-        Some((swfs, figuras, carregamentos, segurando, texturas, texturas_mb)) => format!(
-            " | swfs {swfs} figuras {figuras} carreg {carregamentos} segurando {segurando} | texturas {texturas} ({texturas_mb} MB)"
+        Some((swfs, figuras, carregamentos, segurando, texturas, texturas_mb, malhas)) => format!(
+            " | swfs {swfs} figuras {figuras} carreg {carregamentos} segurando {segurando} | texturas {texturas} ({texturas_mb} MB) malhas {malhas}"
         ),
         None => String::new(),
     };
 
+    let epoca = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let ligado = tempo_ligado(epoca);
+
     anotar(&format!(
-        "memoria livre: {mb} MB | usado {usado} MB | minimo {menor} MB{numeros}"
+        "memoria livre: {mb} MB | usado {usado} MB | minimo {menor} MB{ligado}{numeros}"
     ));
 }
 
