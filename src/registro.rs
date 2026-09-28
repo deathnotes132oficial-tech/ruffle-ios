@@ -127,7 +127,7 @@ fn relogio(epoca: u64) -> (i64, i64, i64, u64, u64, u64) {
 // numero vem perto de zero — e ai o proprio zero avisa que a medida nao serve,
 // em vez de mentir um valor plausivel.
 #[link(name = "Metal", kind = "framework")]
-unsafe extern "C" {
+extern "C" {
     fn MTLCreateSystemDefaultDevice() -> *mut objc2::runtime::AnyObject;
 }
 
