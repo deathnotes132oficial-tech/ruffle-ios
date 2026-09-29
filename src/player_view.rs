@@ -1,4 +1,4 @@
-use std::cell::{Cell, OnceCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
@@ -6,15 +6,15 @@ use std::time::Instant;
 use objc2::rc::{Allocated, Retained};
 use objc2::runtime::AnyClass;
 use objc2::{define_class, msg_send, sel, ClassType, DefinedClass as _};
-use objc2_core_foundation::CGRect;
+use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_foundation::{
     MainThreadMarker, NSCoder, NSDate, NSObjectProtocol, NSRunLoop, NSRunLoopCommonModes, NSSet,
     NSString, NSTimer,
 };
 use objc2_quartz_core::{CALayer, CALayerDelegate, CAMetalLayer};
 use objc2_ui_kit::{
-    UIEvent, UIKey, UIKeyInput, UIPress, UIPressPhase, UIPressesEvent, UITextInputTraits, UITouch,
-    UITouchPhase, UIView, UIViewContentMode,
+    UIColor, UIEvent, UIKey, UIKeyInput, UILabel, UIPress, UIPressPhase, UIPressesEvent,
+    UITextInputTraits, UITouch, UITouchPhase, UIView, UIViewContentMode,
 };
 use ruffle_core::events::{
     KeyDescriptor, KeyLocation, LogicalKey, MouseButton, NamedKey, PhysicalKey, TextControlCode,
@@ -66,6 +66,11 @@ pub struct Ivars {
     /// quadro enquanto o cursor estivesse no campo — 60 pedidos por segundo
     /// pra uma coisa que ja esta aberta.
     mostrando_teclado: Cell<bool>,
+    /// O numero de memoria no canto da tela.
+    ///
+    /// Existe enquanto a memoria for o assunto. Sai junto com o resto das
+    /// medidas, quando o aplicativo parar de fechar.
+    medidor: RefCell<Option<Retained<UILabel>>>,
 }
 
 impl fmt::Debug for Ivars {
@@ -468,6 +473,7 @@ impl PlayerView {
         };
         if medir {
             self.ivars().ultima_medida.set(Some(agora));
+            self.mostrar_memoria();
             // Os contadores do Ruffle so existem depois que o jogo sobe.
             let contagem = if self.ivars().player.get().is_some() {
                 // APERTOU: PEDE UMA COLETA COMPLETA ANTES DE MEDIR.
@@ -568,6 +574,43 @@ impl PlayerView {
     pub fn alternar_teclado(&self) {
         let agora = self.ivars().mostrando_teclado.get();
         self.ivars().teclado_manual.set(Some(!agora));
+    }
+
+    /// O numero de memoria no canto de cima, pro jogador acompanhar.
+    ///
+    /// Nasce na primeira medida, porque antes disso nao ha o que mostrar. Fica
+    /// na esquerda: a direita e onde moram os controles do jogo e os nossos.
+    fn mostrar_memoria(&self) {
+        let Some(usado) = crate::registro::usado_mb() else {
+            return;
+        };
+
+        let mtm = MainThreadMarker::from(self);
+        let mut guardado = self.ivars().medidor.borrow_mut();
+
+        if guardado.is_none() {
+            let etiqueta = unsafe {
+                UILabel::initWithFrame(
+                    mtm.alloc(),
+                    CGRect::new(CGPoint::new(12.0, 8.0), CGSize::new(150.0, 26.0)),
+                )
+            };
+            unsafe {
+                etiqueta.setTextColor(Some(&UIColor::whiteColor()));
+                etiqueta.setBackgroundColor(Some(&UIColor::colorWithRed_green_blue_alpha(
+                    0.0, 0.0, 0.0, 0.45,
+                )));
+            }
+            // Nao pode roubar toque do jogo: e so um numero.
+            etiqueta.setUserInteractionEnabled(false);
+            self.addSubview(&etiqueta);
+            *guardado = Some(etiqueta);
+        }
+
+        if let Some(etiqueta) = guardado.as_ref() {
+            let texto = NSString::from_str(&format!(" {usado} MB"));
+            unsafe { etiqueta.setText(Some(&texto)) };
+        }
     }
 
     /// Houve toque ha pouco?
