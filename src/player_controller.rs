@@ -837,14 +837,22 @@ impl PlayerController {
         // aparelho. Encostando na borda, os controles caem dentro dessa faixa
         // ate onde ela der, e so invadem o jogo no que faltar. E o mesmo
         // criterio da coluna da esquerda, que ja encosta na outra ponta.
-        let largo = lado * 2.4;
-        let alto = lado * 1.3;
+        // UM DECIMO MENORES, PRA COBRIR MENOS JOGO.
+        //
+        // Encostados na borda, o que sobra deles depois da tarja preta cai em
+        // cima do jogo. Encolher os dois lados na mesma proporcao devolve essa
+        // faixa sem mudar a forma do botao — e como o canto continua sendo a
+        // conta de origem, eles seguem colados na ponta sozinhos.
+        const ENCOLHER: f64 = 0.9;
+
+        let largo = lado * 2.4 * ENCOLHER;
+        let alto = lado * 1.3 * ENCOLHER;
         let x_espaco = largura - folga - largo;
         let y_espaco = altura - folga - alto;
         por(11, x_espaco, y_espaco, largo, alto);
 
         // a area do mouse fica EM CIMA do espaco, igual ao APK
-        let alto_area = lado * 2.6;
+        let alto_area = lado * 2.6 * ENCOLHER;
         if let Some(area) = self.ivars().area_mouse.borrow().as_ref() {
             area.setFrame(CGRect::new(
                 CGPoint::new(x_espaco, y_espaco - folga - alto_area),
