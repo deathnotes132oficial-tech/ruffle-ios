@@ -470,6 +470,18 @@ impl PlayerView {
             self.ivars().ultima_medida.set(Some(agora));
             // Os contadores do Ruffle so existem depois que o jogo sobe.
             let contagem = if self.ivars().player.get().is_some() {
+                // APERTOU: PEDE UMA COLETA COMPLETA ANTES DE MEDIR.
+                //
+                // O coletor do Ruffle se guia pelo tamanho dos objetos, e nao
+                // pela carga pendurada neles, entao ele nao percebe quando um
+                // punhado de objetos mortos esta segurando gigabytes. Quem
+                // percebe e daqui, que enxerga a memoria do aparelho.
+                //
+                // Antes de medir, de proposito: assim a linha do registro ja
+                // mostra o resultado da coleta, e nao o estado anterior a ela.
+                if folga < 1200 {
+                    self.player_lock().coletar_tudo();
+                }
                 Some(self.player_lock().contagem_biblioteca())
             } else {
                 None
