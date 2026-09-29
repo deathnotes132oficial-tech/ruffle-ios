@@ -339,6 +339,19 @@ pub fn anotar_memoria(contagem: Option<String>) {
     ));
 }
 
+/// Quanto o aplicativo cresceu desde que abriu, pra mostrar na tela.
+///
+/// A mesma conta da linha do registro, sem escrever nada: quem desenha na
+/// tela nao pode gravar em disco a cada quadro.
+pub fn usado_mb() -> Option<u64> {
+    let mb = memoria_livre_mb()?;
+    let inicial = FOLGA_INICIAL.load(Ordering::Relaxed);
+    if inicial == 0 {
+        return Some(0);
+    }
+    Some(inicial.saturating_sub(mb))
+}
+
 /// O iOS avisou que a memoria esta apertando.
 ///
 /// ESTE AVISO E A RESPOSTA QUE FALTAVA. Se ele aparecer antes da morte, foi o
