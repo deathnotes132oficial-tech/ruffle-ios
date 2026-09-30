@@ -20,5 +20,24 @@
 	     entra uma lista de um item so, valida no iPhone. -->
 	<key>com.apple.developer.kernel.increased-memory-limit</key>
 	<true/>
+
+	<!-- O DOMINIO QUE ESTE APLICATIVO REIVINDICA.
+
+	     Com isto, um link normal de https do site abre o aplicativo direto, sem
+	     a pergunta "abrir no DN Flash?" que o esquema deathnote:// obriga.
+
+	     NAO BASTA SOZINHO, DE PROPOSITO. O aplicativo diz "eu reivindico este
+	     dominio" e o site precisa dizer "eu autorizo este aplicativo", num
+	     arquivo em /.well-known/apple-app-site-association. Os dois lados tem
+	     que concordar — e por isso que ninguem consegue sequestrar os links de
+	     um site alheio.
+
+	     O deathnote:// continua valendo. Se este caminho falhar por qualquer
+	     motivo — arquivo barrado no servidor, cache da Apple desatualizado — o
+	     site cai no esquema antigo e ninguem fica sem jogar. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:deathnotestore.com.br</string>
+	</array>
 </dict>
 </plist>
