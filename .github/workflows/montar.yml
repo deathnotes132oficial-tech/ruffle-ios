@@ -426,6 +426,18 @@ jobs:
             echo "PARANDO AQUI. Nada vai pro TestFlight sem a permissao."
             exit 1
           fi
+
+          # O dominio nao para a montagem se faltar: sem ele o aplicativo ainda
+          # funciona, so volta a perguntar "abrir no DN Flash?" a cada entrada.
+          # Avisar basta; parar seria castigo grande demais pro estrago.
+          if codesign -d --entitlements :- "$APP" 2>/dev/null \
+             | grep -q "associated-domains"; then
+            echo "OK: o dominio do site ESTA no aplicativo."
+          else
+            echo "AVISO: o dominio do site nao entrou — o jogador vai ver a"
+            echo "       pergunta 'abrir no DN Flash?' a cada entrada."
+            echo "       Confira 'Associated Domains' no identificador $BUNDLE."
+          fi
           cd ..
 
       - name: Mandar pro TestFlight
