@@ -352,6 +352,7 @@ impl LibraryController {
         tracing::info!("library viewDidLoad");
 
         self.montar_barra_de_baixo();
+        self.garantir_exemplo();
         self.setup_logo();
 
         unsafe {
@@ -360,6 +361,56 @@ impl LibraryController {
                 .performFetch()
                 .expect("failed fetching movies")
         };
+    }
+
+    /// UM ARQUIVO DE EXEMPLO, PRA BIBLIOTECA NUNCA NASCER VAZIA.
+    ///
+    /// Sem isto, quem abre o aplicativo pela primeira vez ve uma lista vazia e
+    /// um botao de escolher arquivo — e nao tem arquivo nenhum pra escolher,
+    /// porque ninguem guarda .swf no iPhone. O aplicativo parece nao fazer
+    /// nada, e quem so vai abrir uma vez (um revisor, um curioso) desiste ali.
+    ///
+    /// O exemplo e a mesma animacao do cabecalho: ja esta dentro do aplicativo,
+    /// nao pesa nada a mais, e prova o que o aplicativo faz com um toque.
+    ///
+    /// Vale so na primeira vez. Se o jogador apagar da lista, nao volta.
+    fn garantir_exemplo(&self) {
+        let Some(asset) = NSDataAsset::initWithName(NSDataAsset::alloc(), ns_string!("logo-anim"))
+        else {
+            return;
+        };
+
+        let Ok(casa) = std::env::var("HOME") else {
+            return;
+        };
+        let alvo = std::path::PathBuf::from(casa)
+            .join("Documents")
+            .join("Exemplo.swf");
+
+        // Ja existe: ou ja foi criado antes, ou o jogador apagou da lista e o
+        // arquivo ficou. Nos dois casos, nao se mexe.
+        if alvo.exists() {
+            return;
+        }
+
+        let dados = unsafe { asset.data() };
+        // SAFETY: so lemos os bytes, e o NSData vive ate o fim desta funcao.
+        let bytes = unsafe { dados.as_bytes_unchecked() };
+        if std::fs::write(&alvo, bytes).is_err() {
+            return;
+        }
+
+        let Some(caminho) = alvo.to_str() else {
+            return;
+        };
+        let texto = NSString::from_str(caminho);
+        // Pelo seletor, e nao pela traducao: o nome do metodo do Objective-C
+        // nao muda de versao pra versao.
+        let url: Retained<NSURL> = unsafe { msg_send![class!(NSURL), fileURLWithPath: &*texto] };
+
+        if storage::movie_from_url(&url).is_none() {
+            storage::add_movie(&url);
+        }
     }
 
     /// A BARRA DE BAIXO: ENDERECO E LICENCAS.
