@@ -28,7 +28,6 @@ pub struct Ivars {
     /// colocar o jogo. Entao o endereco fica esperando aqui e e tocado no
     /// primeiro momento em que o aplicativo esta de pe.
     link_esperando: RefCell<Option<String>>,
-    /// Idem pra tela de entrada: ela entra uma vez, na primeira abertura.
 }
 
 define_class!(
@@ -113,6 +112,13 @@ define_class!(
             // A tela de entrada continua no codigo, em tela_de_entrada.rs, caso
             // um dia volte a fazer sentido. So nao e mais o comeco de nada.
 
+            // O link do site que ficou esperando a tela nascer.
+            let esperando = self.ivars().link_esperando.borrow_mut().take();
+            if let Some(endereco) = esperando {
+                tracing::info!("abrindo o link do site que estava guardado");
+                tocar_endereco(scene, &endereco);
+            }
+
             // ENTRADA DE TESTE: --jogo <endereco>
             //
             // Existe porque o iPhone pergunta "abrir no Ruffle?" quando o
@@ -121,13 +127,6 @@ define_class!(
             //
             // Pro jogador isso nunca aparece: ele toca no link do site,
             // responde a pergunta uma vez, e pronto.
-            // O link que ficou esperando a tela nascer.
-            let esperando = self.ivars().link_esperando.borrow_mut().take();
-            if let Some(endereco) = esperando {
-                tracing::info!("abrindo o link do site que estava guardado");
-                tocar_endereco(scene, &endereco);
-            }
-
             if !self.ivars().ja_abriu_de_teste.get() {
                 self.ivars().ja_abriu_de_teste.set(true);
                 if let Some(endereco) = endereco_de_teste() {
