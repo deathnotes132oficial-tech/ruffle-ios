@@ -2,7 +2,7 @@ use std::cell::OnceCell;
 
 use objc2::rc::{Allocated, Retained};
 use objc2::runtime::{AnyObject, ProtocolObject};
-use objc2::{define_class, msg_send, AllocAnyThread, DefinedClass as _, Message};
+use objc2::{class, define_class, msg_send, sel, AllocAnyThread, DefinedClass as _, Message};
 use objc2_core_data::{
     NSFetchedResultsChangeType, NSFetchedResultsController, NSFetchedResultsControllerDelegate,
     NSFetchedResultsSectionInfo,
@@ -13,8 +13,8 @@ use objc2_foundation::{
 };
 use objc2_ui_kit::{
     NSDataAsset, UIBarButtonItem, UIDocumentPickerDelegate, UIDocumentPickerViewController,
-    UILabel, UITableView, UITableViewCell, UITableViewCellEditingStyle, UITableViewController,
-    UITableViewDataSource, UITableViewRowAnimation,
+    UILabel, UIPasteboard, UITableView, UITableViewCell, UITableViewCellEditingStyle,
+    UITableViewController, UITableViewDataSource, UITableViewRowAnimation,
 };
 #[allow(deprecated)]
 use objc2_ui_kit::{UIDocumentPickerMode, UIStoryboardSegue};
@@ -24,7 +24,34 @@ use ruffle_frontend_utils::backends::audio::CpalAudioBackend;
 
 use crate::edit_controller::EditController;
 use crate::storage::Movie;
+use crate::scene_delegate::tocar_endereco_no_nav;
 use crate::{storage, PlayerController, PlayerView};
+
+/// O AVISO QUE A LICENCA EXIGE.
+///
+/// O Ruffle e o ruffle-ios sao MIT ou Apache 2.0, a escolha de quem usa. A MIT
+/// foi a escolhida, e ela cobra uma coisa so: que este aviso apareca junto com
+/// o programa. E por isso que ele esta aqui, e nao num arquivo que ninguem abre.
+const LICENCA: &str = "Este aplicativo usa o Ruffle, um tocador de Flash de \
+     codigo aberto.\n\n\
+     Copyright (c) 2018-2022 Ruffle LLC <ruffle@ruffle.rs> e colaboradores do \
+     Ruffle (https://github.com/ruffle-rs/ruffle)\n\n\
+     Permission is hereby granted, free of charge, to any person obtaining a \
+     copy of this software and associated documentation files (the \"Software\"), \
+     to deal in the Software without restriction, including without limitation \
+     the rights to use, copy, modify, merge, publish, distribute, sublicense, \
+     and/or sell copies of the Software, and to permit persons to whom the \
+     Software is furnished to do so, subject to the following conditions:\n\n\
+     The above copyright notice and this permission notice shall be included in \
+     all copies or substantial portions of the Software.\n\n\
+     THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR \
+     IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, \
+     FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL \
+     THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER \
+     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING \
+     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER \
+     DEALINGS IN THE SOFTWARE.\n\n\
+     DN Flash nao e o Ruffle e nao fala pelo projeto Ruffle.";
 
 // There is no standardized UTI for SWFs, so this is one we picked.
 pub const SWF_UTI: &str = "com.adobe.swf";
@@ -165,6 +192,16 @@ define_class!(
         #[allow(deprecated)]
         fn _show_document_picker(&self, _sender: Option<&AnyObject>) {
             self.show_document_picker();
+        }
+
+        #[unsafe(method(abrirEndereco:))]
+        fn _abrir_endereco(&self, _sender: Option<&AnyObject>) {
+            self.abrir_endereco();
+        }
+
+        #[unsafe(method(mostrarLicencas:))]
+        fn _mostrar_licencas(&self, _sender: Option<&AnyObject>) {
+            self.mostrar_licencas();
         }
     }
 
@@ -314,6 +351,7 @@ impl LibraryController {
     fn view_did_load(&self) {
         tracing::info!("library viewDidLoad");
 
+        self.montar_barra_de_baixo();
         self.setup_logo();
 
         unsafe {
@@ -324,10 +362,133 @@ impl LibraryController {
         };
     }
 
+    /// A BARRA DE BAIXO: ENDERECO E LICENCAS.
+    ///
+    /// Embaixo, e nao em cima, porque a barra de cima ja vem montada pelo
+    /// storyboard com o "+" e o "Editar". Mexer nela seria adivinhar o que ja
+    /// esta la; a de baixo esta vazia e nao briga com ninguem.
+    fn montar_barra_de_baixo(&self) {
+        let mtm = MainThreadMarker::from(self);
+
+        let botao = |titulo: &str, acao| -> Retained<UIBarButtonItem> {
+            let texto = NSString::from_str(titulo);
+            unsafe {
+                msg_send![
+                    mtm.alloc::<UIBarButtonItem>(),
+                    initWithTitle: &*texto,
+                    style: 0isize,          // UIBarButtonItemStylePlain
+                    target: self,
+                    action: acao,
+                ]
+            }
+        };
+
+        // O espaco flexivel entre os dois empurra um pra cada ponta.
+        let espaco: Retained<UIBarButtonItem> = unsafe {
+            msg_send![
+                mtm.alloc::<UIBarButtonItem>(),
+                initWithBarButtonSystemItem: 5isize,   // FlexibleSpace
+                target: Option::<&AnyObject>::None,
+                action: Option::<objc2::runtime::Sel>::None,
+            ]
+        };
+
+        let endereco = botao("Abrir endereço", sel!(abrirEndereco:));
+        let licencas = botao("Licenças", sel!(mostrarLicencas:));
+        let itens = NSArray::from_retained_slice(&[endereco, espaco, licencas]);
+
+        unsafe {
+            let _: () = msg_send![self, setToolbarItems: &*itens, animated: false];
+            if let Some(nav) = self.navigationController() {
+                let _: () = msg_send![&*nav, setToolbarHidden: false, animated: false];
+            }
+        }
+    }
+
+    /// Abre o endereço que estiver na área de transferência.
+    ///
+    /// Sem campo de digitação de propósito: ninguém digita um endereço de jogo
+    /// à mão no celular — ele chega copiado, de uma mensagem ou de uma página.
+    /// Colar é o gesto que a pessoa já ia fazer.
+    fn abrir_endereco(&self) {
+        let area = UIPasteboard::generalPasteboard();
+        let copiado = unsafe { area.string() }.map(|s| s.to_string());
+
+        let texto = match copiado {
+            Some(t) if !t.trim().is_empty() => t.trim().to_string(),
+            _ => {
+                self.avisar(
+                    "Nada copiado",
+                    "Copie o endereço de um arquivo .swf e toque aqui de novo.",
+                );
+                return;
+            }
+        };
+
+        let mtm = MainThreadMarker::from(self);
+        let tocou = self
+            .navigationController()
+            .and_then(|nav| tocar_endereco_no_nav(&nav, mtm, &texto));
+
+        if tocou.is_none() {
+            self.avisar(
+                "Endereço não serve",
+                "O que está copiado não é um endereço que eu consiga abrir.",
+            );
+        }
+    }
+
+    /// O aviso de licenças que a MIT exige.
+    fn mostrar_licencas(&self) {
+        self.avisar("Licenças", LICENCA);
+    }
+
+    /// Uma caixinha com título, texto e um "OK".
+    ///
+    /// Montada por seletor do Objective-C em vez das traduções do objc2: são os
+    /// mesmos nomes de sempre, e assim não há nome de tradução pra errar.
+    fn avisar(&self, titulo: &str, mensagem: &str) {
+        let t = NSString::from_str(titulo);
+        let m = NSString::from_str(mensagem);
+        let ok = NSString::from_str("OK");
+
+        unsafe {
+            let caixa: Retained<AnyObject> = msg_send![
+                class!(UIAlertController),
+                alertControllerWithTitle: &*t,
+                message: &*m,
+                preferredStyle: 1isize,      // UIAlertControllerStyleAlert
+            ];
+            let acao: Retained<AnyObject> = msg_send![
+                class!(UIAlertAction),
+                actionWithTitle: &*ok,
+                style: 0isize,               // UIAlertActionStyleDefault
+                handler: std::ptr::null::<AnyObject>(),
+            ];
+            let _: () = msg_send![&*caixa, addAction: &*acao];
+            let _: () = msg_send![
+                self,
+                presentViewController: &*caixa,
+                animated: true,
+                completion: std::ptr::null::<AnyObject>(),
+            ];
+        }
+    }
+
     fn setup_logo(&self) {
         let view = self.logo_view();
-        let asset = NSDataAsset::initWithName(NSDataAsset::alloc(), ns_string!("logo-anim"))
-            .expect("asset store should contain logo-anim");
+        // SEM LOGO, SEM DRAMA.
+        //
+        // A animacao que vinha aqui e a marca do Ruffle, e marca a licenca nao
+        // da: MIT e Apache entregam o codigo e dizem, com todas as letras, que
+        // nome e logo do autor continuam dele. Entao se o arquivo nao estiver
+        // mais na caixa de recursos, a tela simplesmente abre sem ele — em vez
+        // de o aplicativo morrer no arranque por causa de um enfeite.
+        let Some(asset) = NSDataAsset::initWithName(NSDataAsset::alloc(), ns_string!("logo-anim"))
+        else {
+            tracing::info!("sem animacao de abertura; seguindo sem ela");
+            return;
+        };
         let data = unsafe { asset.data() };
         // SAFETY: SwfMovie::from_data won't modify the NSData.
         let bytes = unsafe { data.as_bytes_unchecked() };
@@ -337,8 +498,14 @@ impl LibraryController {
         // carregador manda na caixa de areia do carregado. Esta animacao vem
         // de dentro do proprio aplicativo, nao foi carregada por ninguem:
         // None e a resposta certa, nao um preenchimento.
-        let movie = SwfMovie::from_data(bytes, "file://logo-anim.swf".into(), None, None)
-            .expect("loading movie");
+        // Enfeite nao derruba aplicativo: se o arquivo vier torto, a tela abre
+        // sem ele. Um panic aqui mataria o app no arranque por causa de um
+        // desenho de cabecalho.
+        let Ok(movie) = SwfMovie::from_data(bytes, "file://logo-anim.swf".into(), None, None)
+        else {
+            tracing::warn!("a animacao de abertura nao pode ser lida; seguindo sem ela");
+            return;
+        };
 
         let renderer = view.create_renderer();
 
