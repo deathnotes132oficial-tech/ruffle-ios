@@ -588,13 +588,19 @@ impl PlayerView {
         let mtm = MainThreadMarker::from(self);
         let mut guardado = self.ivars().medidor.borrow_mut();
 
+        // NO CANTO DIREITO, E RECALCULADO SEMPRE.
+        //
+        // Na esquerda ele tapava os numeros do jogo. O canto vem da largura de
+        // agora, e nao de uma conta feita uma vez, porque a tela gira e muda de
+        // tamanho — com posicao fixa ele sairia da tela ou deixaria de encostar.
+        let largura = 150.0;
+        let onde = CGRect::new(
+            CGPoint::new(self.bounds().size.width - largura - 12.0, 8.0),
+            CGSize::new(largura, 26.0),
+        );
+
         if guardado.is_none() {
-            let etiqueta = unsafe {
-                UILabel::initWithFrame(
-                    mtm.alloc(),
-                    CGRect::new(CGPoint::new(12.0, 8.0), CGSize::new(150.0, 26.0)),
-                )
-            };
+            let etiqueta = unsafe { UILabel::initWithFrame(mtm.alloc(), onde) };
             unsafe {
                 etiqueta.setTextColor(Some(&UIColor::whiteColor()));
                 etiqueta.setBackgroundColor(Some(&UIColor::colorWithRed_green_blue_alpha(
@@ -608,8 +614,15 @@ impl PlayerView {
         }
 
         if let Some(etiqueta) = guardado.as_ref() {
-            let texto = NSString::from_str(&format!(" {usado} MB"));
-            unsafe { etiqueta.setText(Some(&texto)) };
+            etiqueta.setFrame(onde);
+            let texto = NSString::from_str(&format!("{usado} MB "));
+            unsafe {
+                // 2 e NSTextAlignmentRight. O numero cru em vez do nome da
+                // traducao: o seletor do Objective-C nao muda de versao pra
+                // versao, e o nome da traducao pode mudar.
+                let _: () = msg_send![&**etiqueta, setTextAlignment: 2isize];
+                etiqueta.setText(Some(&texto));
+            }
         }
     }
 
@@ -706,10 +719,19 @@ impl PlayerView {
                 player_lock.handle_event(PlayerEvent::MouseMove { x, y })
             }
             UITouchPhase::Ended => {
+                // O DEDO SAI, O PONTEIRO FICA.
+                //
+                // Aqui vinha um "o mouse saiu da tela" a cada dedo levantado —
+                // o que faz sentido no Ruffle de origem, onde nao ha ponteiro:
+                // sem dedo, nao ha cursor.
+                //
+                // Nos temos a setinha, e ela continua onde estava. Dizer que o
+                // mouse saiu apagava o que estivesse sob ela, e era por isso que
+                // a descricao do item aparecia e sumia no mesmo instante: o
+                // jogo recebia o "passei por cima" e, um piscar depois, o
+                // "sai da tela".
                 player_lock.set_mouse_in_stage(true);
-                let up_handled = player_lock.handle_event(PlayerEvent::MouseUp { x, y, button });
-                player_lock.set_mouse_in_stage(false);
-                up_handled || player_lock.handle_event(PlayerEvent::MouseLeave)
+                player_lock.handle_event(PlayerEvent::MouseUp { x, y, button })
             }
             UITouchPhase::Cancelled => {
                 player_lock.set_mouse_in_stage(true);
