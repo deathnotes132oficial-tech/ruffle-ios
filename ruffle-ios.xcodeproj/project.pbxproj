@@ -336,7 +336,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "ruffle-orange";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "dn-ouro";
 				CODE_SIGN_ENTITLEMENTS = "ruffle-ios.entitlements";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
@@ -374,7 +374,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "ruffle-orange";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "dn-ouro";
 				CODE_SIGN_ENTITLEMENTS = "ruffle-ios.entitlements";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
