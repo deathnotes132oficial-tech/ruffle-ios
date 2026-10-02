@@ -8,7 +8,7 @@
 		<true/>
 	</dict>
 	<key>CFBundleDisplayName</key>
-	<string>DN Flash</string>
+	<string>CF Client</string>
 	<key>CFBundleIconName</key>
 	<string>AppIcon</string>
 	<key>CFBundleDocumentTypes</key>

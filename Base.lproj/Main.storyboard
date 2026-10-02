@@ -14,7 +14,7 @@
         <!--Main-->
         <scene sceneID="Uit-rk-df1">
             <objects>
-                <navigationController storyboardIdentifier="root-navigation" title="DN Flash" useStoryboardIdentifierAsRestorationIdentifier="YES" id="nja-X3-Lg5" userLabel="Main" sceneMemberID="viewController">
+                <navigationController storyboardIdentifier="root-navigation" title="CF Client" useStoryboardIdentifierAsRestorationIdentifier="YES" id="nja-X3-Lg5" userLabel="Main" sceneMemberID="viewController">
                     <navigationBar key="navigationBar" contentMode="scaleToFill" id="0pP-9o-gnN">
                         <rect key="frame" x="0.0" y="59" width="393" height="44"/>
                         <autoresizingMask key="autoresizingMask"/>
