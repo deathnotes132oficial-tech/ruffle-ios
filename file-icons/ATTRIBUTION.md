@@ -1,7 +1,8 @@
-# File Icon Attribution
+# Origem dos icones de documento
 
-The `document_swf` icon is taken directly from Flash Player, produced by Adobe, and of unknown license.
+Os icones `document_swf` e `document_ruf` sao desenho proprio deste projeto.
 
-The `document_ruf` icon is taken from [here](https://discord.com/channels/610531541889581066/1225519553916829736/1225933184630521926).
-
-Conversion between the different formats is done with the `icnsutil` Python package.
+Eles substituem os que vinham aqui antes, que nao podiam viajar dentro do
+aplicativo: o `document_swf` era retirado diretamente do Flash Player, da
+Adobe, de licenca desconhecida, e o `document_ruf` vinha do Discord do
+projeto Ruffle.

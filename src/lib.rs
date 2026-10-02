@@ -15,7 +15,6 @@ mod player_view;
 mod registro;
 mod scene_delegate;
 mod teclado;
-mod tela_de_entrada;
 mod storage;
 
 pub use self::app_delegate::AppDelegate;
@@ -63,10 +62,6 @@ pub fn launch(app_class: Option<&AnyClass>, delegate_class: Option<&AnyClass>) {
     let _ = library_controller::LibraryController::class();
     let _ = edit_controller::EditController::class();
     let _ = add_controller::AddController::class();
-
-    // A nossa tela de entrada. Ela nao vem do storyboard, mas registrar aqui
-    // junto das outras mantem um lugar so pra procurar quando faltar alguma.
-    let _ = tela_de_entrada::TelaDeEntrada::class();
 
     // This is loaded by CoreData
     let _ = storage::Movie::class();

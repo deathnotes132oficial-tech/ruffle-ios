@@ -108,9 +108,6 @@ define_class!(
             // por deathnote://, que qualquer site pode usar. Quem quer jogar
             // alguma coisa entra no site dela pelo navegador e volta pra ca com
             // o endereco — o aplicativo nao guarda destino nenhum.
-            //
-            // A tela de entrada continua no codigo, em tela_de_entrada.rs, caso
-            // um dia volte a fazer sentido. So nao e mais o comeco de nada.
 
             // O link do site que ficou esperando a tela nascer.
             let esperando = self.ivars().link_esperando.borrow_mut().take();

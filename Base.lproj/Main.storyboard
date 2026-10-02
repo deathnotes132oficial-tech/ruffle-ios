@@ -18,11 +18,11 @@
                     <navigationBar key="navigationBar" contentMode="scaleToFill" id="0pP-9o-gnN">
                         <rect key="frame" x="0.0" y="59" width="393" height="44"/>
                         <autoresizingMask key="autoresizingMask"/>
-                        <color key="backgroundColor" name="ruffle-blue"/>
-                        <color key="tintColor" name="ruffle-orange"/>
-                        <color key="barTintColor" name="ruffle-blue-6"/>
+                        <color key="backgroundColor" name="dn-azul"/>
+                        <color key="tintColor" name="dn-ouro"/>
+                        <color key="barTintColor" name="dn-azul-6"/>
                         <textAttributes key="titleTextAttributes">
-                            <color key="textColor" name="ruffle-orange"/>
+                            <color key="textColor" name="dn-ouro"/>
                         </textAttributes>
                     </navigationBar>
                     <connections>
@@ -40,10 +40,10 @@
                     <tableView key="view" clipsSubviews="YES" contentMode="scaleToFill" alwaysBounceVertical="YES" dataMode="prototypes" style="grouped" separatorStyle="default" rowHeight="70" estimatedRowHeight="-1" sectionHeaderHeight="18" estimatedSectionHeaderHeight="-1" sectionFooterHeight="18" estimatedSectionFooterHeight="-1" id="eb3-Rh-jvJ">
                         <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                         <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                        <color key="backgroundColor" name="ruffle-blue"/>
-                        <color key="tintColor" name="ruffle-orange"/>
-                        <color key="sectionIndexColor" name="ruffle-orange"/>
-                        <color key="sectionIndexTrackingBackgroundColor" name="ruffle-blue-6"/>
+                        <color key="backgroundColor" name="dn-azul"/>
+                        <color key="tintColor" name="dn-ouro"/>
+                        <color key="sectionIndexColor" name="dn-ouro"/>
+                        <color key="sectionIndexTrackingBackgroundColor" name="dn-azul-6"/>
                         <view key="tableHeaderView" contentMode="scaleToFill" id="qwq-LQ-yFa" userLabel="Logo View" customClass="PlayerView">
                             <rect key="frame" x="0.0" y="0.0" width="393" height="170"/>
                             <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMaxY="YES"/>
@@ -87,7 +87,7 @@
                                         <constraint firstItem="uW0-3v-CCS" firstAttribute="top" secondItem="m0N-rP-vZP" secondAttribute="top" constant="8" id="vEn-0i-8Rp"/>
                                     </constraints>
                                 </tableViewCellContentView>
-                                <color key="backgroundColor" name="ruffle-blue-9"/>
+                                <color key="backgroundColor" name="dn-azul-9"/>
                                 <color key="tintColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
                                 <connections>
                                     <segue destination="ClQ-AD-lw4" kind="show" identifier="run-item" id="KKZ-D5-dTX"/>
@@ -364,7 +364,7 @@
                         <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <viewLayoutGuide key="safeArea" id="s1f-Y6-cjZ"/>
-                        <color key="backgroundColor" name="ruffle-blue"/>
+                        <color key="backgroundColor" name="dn-azul"/>
                         <accessibility key="accessibilityConfiguration">
                             <accessibilityTraits key="traits" playsSound="YES" updatesFrequently="YES"/>
                         </accessibility>
@@ -380,16 +380,16 @@
         <image name="document_ruf" width="64" height="64"/>
         <image name="minus.circle.fill" catalog="system" width="128" height="123"/>
         <image name="plus.circle.fill" catalog="system" width="128" height="123"/>
-        <namedColor name="ruffle-blue">
+        <namedColor name="dn-azul">
             <color red="0.21568627450980393" green="0.32156862745098042" blue="0.5490196078431373" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
         </namedColor>
-        <namedColor name="ruffle-blue-6">
+        <namedColor name="dn-azul-6">
             <color red="0.32156862745098042" green="0.44313725490196076" blue="0.71372549019607845" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
         </namedColor>
-        <namedColor name="ruffle-blue-9">
+        <namedColor name="dn-azul-9">
             <color red="0.17254901960784313" green="0.28627450980392155" blue="0.50196078431372548" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
         </namedColor>
-        <namedColor name="ruffle-orange">
+        <namedColor name="dn-ouro">
             <color red="1" green="0.67843137254901964" blue="0.20000000000000001" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
         </namedColor>
         <systemColor name="systemBackgroundColor">
