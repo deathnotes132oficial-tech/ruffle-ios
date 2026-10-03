@@ -6,6 +6,7 @@ use tracing_subscriber::fmt::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
+mod alocador;
 mod add_controller;
 mod app_delegate;
 mod edit_controller;
@@ -16,6 +17,15 @@ mod registro;
 mod scene_delegate;
 mod teclado;
 mod storage;
+
+/// TODO PEDIDO DE MEMORIA DO RUST PASSA POR AQUI.
+///
+/// E a unica forma de saber onde a memoria esta: os contadores da biblioteca
+/// do Ruffle explicavam 75 MB de 1807, e o coletor do ActionScript so sabe
+/// contar objetos. Aqui nada escapa, porque nao ha outro caminho pra pedir
+/// memoria ao sistema.
+#[global_allocator]
+static ALOCADOR: alocador::Contado = alocador::Contado;
 
 pub use self::app_delegate::AppDelegate;
 pub use self::player_controller::PlayerController;

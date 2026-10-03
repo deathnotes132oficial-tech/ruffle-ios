@@ -493,6 +493,13 @@ impl PlayerView {
                 None
             };
             crate::registro::anotar_memoria(contagem);
+            // PICO NOVO MERECE UMA LINHA SO DELE.
+            //
+            // O que mata nao e o patamar, sao os saltos: medidas seguidas
+            // mostraram 1160 MB e, menos de um segundo depois, 1959. Marcar
+            // o pico separado deixa esses saltos achaveis no registro sem ter
+            // que ler linha por linha.
+            crate::registro::marcar_pico();
         }
 
         // O TECLADO, SE O JOGO PEDIU.

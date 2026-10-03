@@ -30,6 +30,7 @@
 //! Anotada de dois em dois segundos durante o jogo, ela mostra no registro se
 //! a morte veio precedida de queda livre, ou se chegou do nada.
 
+use std::ffi::{c_char, c_void};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::panic;
@@ -37,6 +38,61 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+/// O NOME DE FABRICA DO APARELHO, do tipo "iPhone14,5".
+///
+/// Sem ele nao da pra montar tabela de compatibilidade nenhuma: dois
+/// registros podem mostrar tetos de memoria completamente diferentes e nao
+/// havia como saber de que aparelhos eram. Com ele, cada relato que chega ja
+/// vem dizendo em que modelo aconteceu.
+fn modelo_do_aparelho() -> Option<String> {
+    extern "C" {
+        fn sysctlbyname(
+            nome: *const c_char,
+            saida: *mut c_void,
+            tamanho: *mut usize,
+            entrada: *mut c_void,
+            tamanho_entrada: usize,
+        ) -> i32;
+    }
+
+    let chave = b"hw.machine\0";
+    let mut tamanho: usize = 0;
+
+    unsafe {
+        // A primeira chamada so pergunta o tamanho; a segunda traz o texto.
+        if sysctlbyname(
+            chave.as_ptr() as *const c_char,
+            std::ptr::null_mut(),
+            &mut tamanho,
+            std::ptr::null_mut(),
+            0,
+        ) != 0
+            || tamanho == 0
+            || tamanho > 256
+        {
+            return None;
+        }
+
+        let mut buraco = vec![0u8; tamanho];
+        if sysctlbyname(
+            chave.as_ptr() as *const c_char,
+            buraco.as_mut_ptr() as *mut c_void,
+            &mut tamanho,
+            std::ptr::null_mut(),
+            0,
+        ) != 0
+        {
+            return None;
+        }
+
+        // Vem terminado em zero, que nao faz parte do nome.
+        while buraco.last() == Some(&0) {
+            buraco.pop();
+        }
+        String::from_utf8(buraco).ok()
+    }
+}
 
 /// A marca de quebra do Ruffle. Continua existindo: quando ela aparece, o
 /// motivo vem escrito, e isso vale mais que qualquer deducao.
@@ -210,6 +266,18 @@ pub fn iniciar_sessao() {
     anotar(&format!(
         "sessao aberta em {dia:02}/{mes:02}/{ano} as {h:02}:{m:02}:{s:02}"
     ));
+
+    // QUEM E O APARELHO, LOGO NA PRIMEIRA LINHA.
+    //
+    // O teto de memoria muda de modelo pra modelo — ja se mediu 6111 MB num
+    // e 2322 MB noutro. Sem saber qual e qual, dois registros nao se
+    // comparam, e nenhuma recomendacao de aparelho passa de chute.
+    let aparelho = modelo_do_aparelho().unwrap_or_else(|| "desconhecido".to_string());
+    let teto = match memoria_livre_mb() {
+        Some(mb) => format!("{mb} MB"),
+        None => "indisponivel (simulador)".to_string(),
+    };
+    anotar(&format!("aparelho: {aparelho} | memoria disponivel ao abrir: {teto}"));
 }
 
 /// Passa a anotar toda quebra do programa.
@@ -334,8 +402,16 @@ pub fn anotar_memoria(contagem: Option<String>) {
         None => String::new(),
     };
 
+    // O QUE O ALOCADOR SABE, EM TODA LINHA.
+    //
+    // "usado" e a conta do iOS: inclui a placa de video, o Objective-C e a
+    // fragmentacao. "rust" e so o que o nosso lado pediu e ainda nao
+    // devolveu. A diferenca entre os dois e o que diz se o buraco esta do
+    // nosso lado ou nao — e era justamente isso que faltava saber.
+    let alocador = crate::alocador::resumo();
+
     anotar(&format!(
-        "memoria livre: {mb} MB | usado {usado} MB | minimo {menor} MB{metal}{ligado}{numeros}"
+        "memoria livre: {mb} MB | usado {usado} MB | minimo {menor} MB{metal}{ligado} | {alocador}{numeros}"
     ));
 }
 
@@ -357,6 +433,46 @@ pub fn usado_mb() -> Option<u64> {
 /// ESTE AVISO E A RESPOSTA QUE FALTAVA. Se ele aparecer antes da morte, foi o
 /// aparelho que apertou e o sistema escolheu a maior vitima. Se a sessao
 /// terminar sem nenhum, o aplicativo estourou sozinho.
+/// O MAIOR USO JA VISTO, e a linha que o registra.
+static MAIOR_USO: AtomicU64 = AtomicU64::new(0);
+
+/// Marca quando o uso bate um recorde, e so entao.
+///
+/// O que derruba o aplicativo nao e o patamar: e o salto. Duas medidas
+/// seguidas mostraram 1160 MB e, menos de um segundo depois, 1959 MB — e a
+/// morte coube entre duas dessas. Uma linha por recorde deixa os saltos
+/// achaveis sem ter que ler o registro inteiro.
+///
+/// So vale subida de 50 MB pra cima: o numero do iOS oscila dezenas de MB
+/// sozinho, e recorde a cada oscilacao encheria o registro de ruido.
+pub fn marcar_pico() {
+    let Some(usado) = usado_mb() else {
+        return;
+    };
+
+    let maior = MAIOR_USO.load(Ordering::Relaxed);
+    if usado < maior + 50 {
+        return;
+    }
+    MAIOR_USO.store(usado, Ordering::Relaxed);
+
+    // O primeiro "recorde" e so a abertura, e nao diz nada.
+    if maior == 0 {
+        return;
+    }
+    retrato(&format!("PICO {usado} MB (antes {maior} MB)"));
+}
+
+/// O retrato completo, pra quando algo importante acontece.
+///
+/// E a mesma informacao da linha de sempre, mas pedida de proposito nos dois
+/// momentos que contam: quando o iOS avisa que esta apertando, e quando se
+/// bate um pico novo. Nesses instantes a linha periodica pode estar a um
+/// segundo de distancia — e um segundo, aqui, ja escondeu 900 MB.
+pub fn retrato(motivo: &str) {
+    anotar(&format!("--- {motivo} --- {}", crate::alocador::resumo()));
+}
+
 pub fn anotar_aviso_de_memoria() {
     match memoria_livre_mb() {
         Some(mb) => anotar(&format!("AVISO DE MEMORIA DO IOS (folga: {mb} MB)")),

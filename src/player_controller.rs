@@ -351,6 +351,12 @@ define_class!(
         fn didReceiveMemoryWarning(&self) {
             let _: () = unsafe { msg_send![super(self), didReceiveMemoryWarning] };
             crate::registro::anotar_aviso_de_memoria();
+            // O AVISO E O MELHOR INSTANTE QUE EXISTE.
+            //
+            // E o unico momento em que o sistema diz, de dentro, que a conta
+            // esta fechando. A linha periodica pode estar a um segundo daqui,
+            // e um segundo ja escondeu 900 MB numa sessao.
+            crate::registro::retrato("aviso de memoria do iOS");
         }
 
         #[unsafe(method(canBecomeFirstResponder))]
