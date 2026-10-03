@@ -364,6 +364,20 @@ pub fn anotar_aviso_de_memoria() {
     }
 }
 
+/// O registro da sessao de agora, inteiro.
+///
+/// Existe pra que haja ALGUM jeito de tirar isto do aparelho. O arquivo mora
+/// na pasta do aplicativo, onde ninguem alcanca sem cabo e sem Xcode — e um
+/// registro que so o aparelho le nao serve pra investigar nada.
+pub fn atual() -> Option<String> {
+    let texto = fs::read_to_string(caminho_atual()?).ok()?;
+    if texto.trim().is_empty() {
+        None
+    } else {
+        Some(texto)
+    }
+}
+
 // ------------------------------------------- O QUE ACONTECEU DA ULTIMA VEZ
 
 /// O registro da sessao passada, inteiro.

@@ -51,7 +51,7 @@ const LICENCA: &str = "Este aplicativo usa o Ruffle, um tocador de Flash de \
      LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING \
      FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER \
      DEALINGS IN THE SOFTWARE.\n\n\
-     DN Flash nao e o Ruffle e nao fala pelo projeto Ruffle.";
+     CF Client nao e o Ruffle e nao fala pelo projeto Ruffle.";
 
 // There is no standardized UTI for SWFs, so this is one we picked.
 pub const SWF_UTI: &str = "com.adobe.swf";
@@ -202,6 +202,11 @@ define_class!(
         #[unsafe(method(mostrarLicencas:))]
         fn _mostrar_licencas(&self, _sender: Option<&AnyObject>) {
             self.mostrar_licencas();
+        }
+
+        #[unsafe(method(mostrarRegistro:))]
+        fn _mostrar_registro(&self, _sender: Option<&AnyObject>) {
+            self.mostrar_registro();
         }
     }
 
@@ -434,19 +439,29 @@ impl LibraryController {
             }
         };
 
-        // O espaco flexivel entre os dois empurra um pra cada ponta.
-        let espaco: Retained<UIBarButtonItem> = unsafe {
-            msg_send![
-                mtm.alloc::<UIBarButtonItem>(),
-                initWithBarButtonSystemItem: 5isize,   // FlexibleSpace
-                target: Option::<&AnyObject>::None,
-                action: Option::<objc2::runtime::Sel>::None,
-            ]
+        // O espaco flexivel separa os botoes. E preciso um objeto NOVO pra
+        // cada vao: o mesmo item nao pode aparecer duas vezes na barra.
+        let espaco = || -> Retained<UIBarButtonItem> {
+            unsafe {
+                msg_send![
+                    mtm.alloc::<UIBarButtonItem>(),
+                    initWithBarButtonSystemItem: 5isize,   // FlexibleSpace
+                    target: Option::<&AnyObject>::None,
+                    action: Option::<objc2::runtime::Sel>::None,
+                ]
+            }
         };
 
         let endereco = botao("Abrir endereço", sel!(abrirEndereco:));
+        let registro = botao("Registro", sel!(mostrarRegistro:));
         let licencas = botao("Licenças", sel!(mostrarLicencas:));
-        let itens = NSArray::from_retained_slice(&[endereco, espaco, licencas]);
+        let itens = NSArray::from_retained_slice(&[
+            endereco,
+            espaco(),
+            registro,
+            espaco(),
+            licencas,
+        ]);
 
         unsafe {
             let _: () = msg_send![self, setToolbarItems: &*itens, animated: false];
@@ -498,6 +513,57 @@ impl LibraryController {
     ///
     /// Montada por seletor do Objective-C em vez das traduções do objc2: são os
     /// mesmos nomes de sempre, e assim não há nome de tradução pra errar.
+    /// O REGISTRO, NA AREA DE TRANSFERENCIA.
+    ///
+    /// O aplicativo anota o tempo todo quanta memoria esta usando e por onde
+    /// passou, e guarda tambem o registro da sessao passada. Isso e o que
+    /// explica uma morte por falta de memoria — e nao servia pra nada,
+    /// porque nao havia como tirar do aparelho.
+    ///
+    /// Copiar e colar e o caminho mais curto: a pessoa ja sabe fazer, nao
+    /// depende de cabo, de computador nem de permissao.
+    ///
+    /// Quando a sessao passada terminou sozinha, ela vem JUNTO e primeiro —
+    /// e justamente a que ninguem consegue pedir na hora, porque quando o
+    /// sistema encerra o aplicativo nao sobra tela pra avisar.
+    fn mostrar_registro(&self) {
+        let morreu = crate::registro::anterior_morreu();
+        let mut texto = String::new();
+
+        if morreu {
+            if let Some(antes) = crate::registro::anterior() {
+                texto.push_str("===== SESSAO ANTERIOR (terminou sozinha) =====\n");
+                texto.push_str(&antes);
+                texto.push_str("\n\n");
+            }
+        }
+
+        if let Some(agora) = crate::registro::atual() {
+            texto.push_str("===== SESSAO DE AGORA =====\n");
+            texto.push_str(&agora);
+        }
+
+        if texto.is_empty() {
+            self.avisar("Registro", "Ainda não há nada registrado.");
+            return;
+        }
+
+        let linhas = texto.lines().count();
+        let ns = NSString::from_str(&texto);
+        let area = UIPasteboard::generalPasteboard();
+        unsafe {
+            let _: () = msg_send![&*area, setString: &*ns];
+        }
+
+        let mut mensagem = format!("Registro copiado ({linhas} linhas). Cole numa mensagem e envie.");
+        if morreu {
+            mensagem.push_str(
+                "\n\nA sessão anterior terminou sozinha — o aplicativo foi encerrado pelo sistema.",
+            );
+        }
+        self.avisar("Registro", &mensagem);
+    }
+
     fn avisar(&self, titulo: &str, mensagem: &str) {
         let t = NSString::from_str(titulo);
         let m = NSString::from_str(mensagem);

@@ -11,6 +11,10 @@
 	<string>CF Client</string>
 	<key>CFBundleIconName</key>
 	<string>AppIcon</string>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
