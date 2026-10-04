@@ -336,6 +336,124 @@ pub fn memoria_livre_mb() -> Option<u64> {
     }
 }
 
+
+// ============ O APARELHO INTEIRO, E O QUE O APLICATIVO OCUPA NELE ============
+//
+// POR QUE AS DUAS MEDIDAS DE ANTES NAO SERVIAM
+// --------------------------------------------
+// `os_proc_available_memory` devolve a folga do APLICATIVO dentro do limite
+// DELE. Quem decide matar olha o aparelho inteiro. Sao grandezas diferentes, e
+// tratar uma como a outra produziu duas leituras erradas:
+//
+//   - uma sessao terminou com "1 GB livre" e parecia nao fazer sentido. Fazia:
+//     o telefone e que estava cheio, nao a nossa cota;
+//   - o numero da tela era `teto - folga`, uma subtracao. Quando o iOS mexia no
+//     teto, ele saltava centenas de MB sem o aplicativo ter alocado nada — e
+//     foram esses saltos fantasmas que eu passei dias caçando.
+//
+// Agora sao dois numeros absolutos, lidos direto do sistema: quanto o APARELHO
+// tem livre, e quanto o APLICATIVO ocupa.
+
+type KernReturn = i32;
+
+extern "C" {
+    fn mach_host_self() -> u32;
+    fn mach_task_self() -> u32;
+    fn host_page_size(maquina: u32, saida: *mut usize) -> KernReturn;
+    fn host_statistics64(
+        maquina: u32,
+        sabor: i32,
+        saida: *mut u32,
+        quantos: *mut u32,
+    ) -> KernReturn;
+    fn task_info(tarefa: u32, sabor: u32, saida: *mut u32, quantos: *mut u32) -> KernReturn;
+}
+
+/// HOST_VM_INFO64. A contagem e o tamanho da estrutura em palavras de 32 bits:
+/// quatro contadores de 32, nove de 64, dois de 32, quatro de 64, quatro de 32
+/// e um de 64 dao 152 bytes — 38 palavras.
+const HOST_VM_INFO64: i32 = 4;
+const HOST_VM_INFO64_PALAVRAS: u32 = 38;
+
+/// MACH_TASK_BASIC_INFO. Tres tamanhos de 64, dois tempos de 64, e dois de 32:
+/// 48 bytes, 12 palavras.
+const MACH_TASK_BASIC_INFO: u32 = 20;
+const MACH_TASK_BASIC_INFO_PALAVRAS: u32 = 12;
+
+/// Quanto o APARELHO tem livre, em MB. Conta as paginas livres mais as
+/// inativas: inativa e memoria de outro app que o sistema pode tomar na hora,
+/// entao ela conta como disponivel na decisao de quem matar.
+pub fn aparelho_livre_mb() -> Option<u64> {
+    let mut pagina: usize = 0;
+    let mut dados = [0u32; HOST_VM_INFO64_PALAVRAS as usize];
+    let mut quantos = HOST_VM_INFO64_PALAVRAS;
+
+    unsafe {
+        let maquina = mach_host_self();
+        if host_page_size(maquina, &mut pagina) != 0 || pagina == 0 {
+            return None;
+        }
+        if host_statistics64(maquina, HOST_VM_INFO64, dados.as_mut_ptr(), &mut quantos) != 0 {
+            return None;
+        }
+    }
+
+    // As quatro primeiras palavras sao livre, ativa, inativa e presa — nessa
+    // ordem, e sao as unicas que se le aqui. O resto da estrutura fica onde
+    // esta: nao depender do formato inteiro e o que torna isto seguro.
+    let livres = dados[0] as u64;
+    let inativas = dados[2] as u64;
+    Some((livres + inativas) * pagina as u64 / (1024 * 1024))
+}
+
+/// Quanto o APLICATIVO ocupa de verdade, em MB.
+///
+/// Numero absoluto, do proprio sistema — nao a subtracao de antes. E o que o
+/// iOS enxerga quando precisa escolher um processo pra encerrar.
+pub fn app_residente_mb() -> Option<u64> {
+    let mut dados = [0u32; MACH_TASK_BASIC_INFO_PALAVRAS as usize];
+    let mut quantos = MACH_TASK_BASIC_INFO_PALAVRAS;
+
+    unsafe {
+        if task_info(
+            mach_task_self(),
+            MACH_TASK_BASIC_INFO,
+            dados.as_mut_ptr(),
+            &mut quantos,
+        ) != 0
+        {
+            return None;
+        }
+    }
+
+    // Primeiro campo e o tamanho virtual, segundo o residente — os dois de 64
+    // bits, entao o residente sao as palavras 2 e 3.
+    let residente = (dados[2] as u64) | ((dados[3] as u64) << 32);
+    if residente == 0 {
+        None
+    } else {
+        Some(residente / (1024 * 1024))
+    }
+}
+
+/// Manda o `malloc` devolver ao sistema o que ja esta livre.
+///
+/// Com centenas de milhares de pedacinhos nascendo e morrendo por segundo, as
+/// listas livres do `malloc` incham: a memoria nao e mais nossa, mas continua
+/// contando no nome do aplicativo — e e por esse numero que o iOS escolhe quem
+/// encerrar. Medido uma vez: 370 MB de diferenca entre o que o Rust tinha vivo
+/// e o que o sistema cobrava.
+///
+/// Devolve quantos MB sairam.
+pub fn devolver_ao_sistema() -> u64 {
+    extern "C" {
+        fn malloc_zone_pressure_relief(zona: *mut std::ffi::c_void, meta: usize) -> usize;
+    }
+    // Zona nula quer dizer "todas as zonas", que e o que se quer aqui.
+    let bytes = unsafe { malloc_zone_pressure_relief(std::ptr::null_mut(), 0) };
+    (bytes / (1024 * 1024)) as u64
+}
+
 // O QUE A MEDIDA ANTERIOR NAO RESPONDIA
 // -------------------------------------
 // Ate aqui o registro dizia so quanto SOBRAVA. Com isso nao da pra separar
@@ -410,8 +528,19 @@ pub fn anotar_memoria(contagem: Option<String>) {
     // nosso lado ou nao — e era justamente isso que faltava saber.
     let alocador = crate::alocador::resumo();
 
+    // OS DOIS LADOS DA MESMA MORTE.
+    //
+    // "aparelho" diz se o telefone inteiro apertou; "app" diz se fomos nos que
+    // crescemos. Sem os dois juntos nao da pra saber qual das duas coisas
+    // matou — e elas pedem consertos opostos.
+    let aparelho = match aparelho_livre_mb() {
+        Some(livre) => format!("{livre} MB livres"),
+        None => "indisponivel".to_string(),
+    };
+    let app = app_residente_mb().unwrap_or(usado);
+
     anotar(&format!(
-        "memoria livre: {mb} MB | usado {usado} MB | minimo {menor} MB{metal}{ligado} | {alocador}{numeros}"
+        "aparelho {aparelho} | app {app} MB | cota livre {mb} MB | minimo {menor} MB{metal}{ligado} | {alocador}{numeros}"
     ));
 }
 
@@ -420,6 +549,19 @@ pub fn anotar_memoria(contagem: Option<String>) {
 /// A mesma conta da linha do registro, sem escrever nada: quem desenha na
 /// tela nao pode gravar em disco a cada quadro.
 pub fn usado_mb() -> Option<u64> {
+    // O QUE O APLICATIVO OCUPA, E NAO O QUANTO ELE CRESCEU.
+    //
+    // Antes isto era `folga inicial - folga de agora`. A conta tinha um
+    // defeito grave: quando o iOS mexia no teto, o numero saltava centenas de
+    // MB sem o aplicativo ter alocado coisa alguma. Era mentira na tela, e
+    // mentira no registro.
+    //
+    // Agora e o tamanho residente do processo, lido do sistema. Se o sistema
+    // nao responder, cai no jeito antigo em vez de sumir com o numero.
+    if let Some(mb) = app_residente_mb() {
+        return Some(mb);
+    }
+
     let mb = memoria_livre_mb()?;
     let inicial = FOLGA_INICIAL.load(Ordering::Relaxed);
     if inicial == 0 {
@@ -461,6 +603,37 @@ pub fn marcar_pico() {
         return;
     }
     retrato(&format!("PICO {usado} MB (antes {maior} MB)"));
+}
+
+/// DEVOLVER O QUE DA, AGORA.
+///
+/// O iOS avisa antes de encerrar um aplicativo — e esse aviso e a unica chance
+/// de evitar ser o escolhido. Ate aqui o aplicativo so ANOTAVA o aviso e nao
+/// devolvia nada, o que esta escrito no proprio codigo desde o dia em que a
+/// anotacao foi posta.
+///
+/// Anota quanto saiu em cada passo, de proposito: se um deles nao render nada,
+/// isso aparece no registro e a gente para de insistir nele.
+pub fn aliviar(soltou_do_jogo: Option<String>) {
+    let antes_app = app_residente_mb();
+    let antes_rust = crate::alocador::vivo_mb();
+
+    let devolvido = devolver_ao_sistema();
+
+    let depois_app = app_residente_mb();
+    let caiu = match (antes_app, depois_app) {
+        (Some(a), Some(d)) => format!("{} MB", a.saturating_sub(d)),
+        _ => "?".to_string(),
+    };
+
+    anotar(&format!(
+        "ALIVIO: malloc devolveu {devolvido} MB | app caiu {caiu} | rust antes {antes_rust} MB depois {} MB{}",
+        crate::alocador::vivo_mb(),
+        match soltou_do_jogo {
+            Some(texto) => format!(" | {texto}"),
+            None => String::new(),
+        }
+    ));
 }
 
 /// O retrato completo, pra quando algo importante acontece.

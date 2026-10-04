@@ -351,6 +351,17 @@ define_class!(
         fn didReceiveMemoryWarning(&self) {
             let _: () = unsafe { msg_send![super(self), didReceiveMemoryWarning] };
             crate::registro::anotar_aviso_de_memoria();
+
+            // AGORA O AVISO TAMBEM AGE, E NAO SO ANOTA.
+            //
+            // Primeiro o jogo solta o que puder (texturas e malhas paradas, e
+            // uma coleta completa); depois se manda o malloc devolver ao
+            // sistema o que ficou sobrando das listas livres dele. A ordem
+            // importa: o malloc so devolve o que ja esta livre, entao liberar
+            // antes e o que da o que devolver.
+            let soltou = self.soltar_do_jogo();
+            crate::registro::aliviar(soltou);
+
             // O AVISO E O MELHOR INSTANTE QUE EXISTE.
             //
             // E o unico momento em que o sistema diz, de dentro, que a conta
@@ -1164,6 +1175,18 @@ impl PlayerController {
     pub fn view(&self) -> Retained<PlayerView> {
         let view = (**self).view().expect("controller loads view");
         view.downcast().expect("must have correct view type")
+    }
+
+    /// Pede ao jogo que solte o que puder.
+    ///
+    /// Devolve nada quando o jogo ainda nem subiu — e esse caso acontece: o
+    /// iOS pode avisar de memoria com a biblioteca na tela, antes de existir
+    /// jogo nenhum. Por isso nao se usa o `player_lock` aqui: ele quebra o
+    /// aplicativo quando nao ha jogador.
+    fn soltar_do_jogo(&self) -> Option<String> {
+        let jogo = self.ivars().player.get()?;
+        let mut travado = jogo.lock().ok()?;
+        Some(travado.devolver_memoria())
     }
 
     #[track_caller]
