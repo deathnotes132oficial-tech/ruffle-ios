@@ -130,7 +130,7 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 [[package]]
 name = "asc"
 version = "0.6.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 dependencies = [
  "anyhow",
 ]
@@ -256,7 +256,7 @@ dependencies = [
 [[package]]
 name = "build_playerglobal"
 version = "0.6.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 dependencies = [
  "asc",
  "clap",
@@ -1049,7 +1049,7 @@ dependencies = [
 [[package]]
 name = "flv-rs"
 version = "0.6.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 dependencies = [
  "bitflags 2.13.2",
  "thiserror 2.0.18",
@@ -2072,7 +2072,7 @@ dependencies = [
 [[package]]
 name = "naga-agal"
 version = "0.6.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 dependencies = [
  "bitflags 2.13.2",
  "naga",
@@ -2083,7 +2083,7 @@ dependencies = [
 [[package]]
 name = "naga-pixelbender"
 version = "0.6.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 dependencies = [
  "anyhow",
  "naga",
@@ -2631,7 +2631,7 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 [[package]]
 name = "pixel_bender"
 version = "0.6.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 dependencies = [
  "byteorder",
  "num-derive",
@@ -3013,7 +3013,7 @@ dependencies = [
 [[package]]
 name = "ruffle_common"
 version = "0.6.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 dependencies = [
  "fnv",
  "gc-arena",
@@ -3031,7 +3031,7 @@ dependencies = [
 [[package]]
 name = "ruffle_core"
 version = "0.6.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 dependencies = [
  "async-channel",
  "bitflags 2.13.2",
@@ -3094,7 +3094,7 @@ dependencies = [
 [[package]]
 name = "ruffle_frontend_utils"
 version = "0.6.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 dependencies = [
  "async-channel",
  "async-io",
@@ -3116,7 +3116,7 @@ dependencies = [
 [[package]]
 name = "ruffle_macros"
 version = "0.6.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3126,7 +3126,7 @@ dependencies = [
 [[package]]
 name = "ruffle_render"
 version = "0.6.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 dependencies = [
  "byteorder",
  "enum-map",
@@ -3155,7 +3155,7 @@ dependencies = [
 [[package]]
 name = "ruffle_render_wgpu"
 version = "0.6.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 dependencies = [
  "bytemuck",
  "enum-map",
@@ -3179,7 +3179,7 @@ dependencies = [
 [[package]]
 name = "ruffle_video"
 version = "0.6.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 dependencies = [
  "ruffle_render",
  "slotmap",
@@ -3190,7 +3190,7 @@ dependencies = [
 [[package]]
 name = "ruffle_video_software"
 version = "0.6.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 dependencies = [
  "flate2",
  "h263-rs",
@@ -3209,7 +3209,7 @@ dependencies = [
 [[package]]
 name = "ruffle_wstr"
 version = "0.6.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 
 [[package]]
 name = "rustc-hash"
@@ -3555,7 +3555,7 @@ dependencies = [
 [[package]]
 name = "swf"
 version = "0.3.0"
-source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#ee6849aa64720f9774db7ef906763f490467eb54"
+source = "git+https://github.com/deathnotes132oficial-tech/ruffle.git?branch=master#37256a8f6110f5b93d6593ec77ae4319841313c3"
 dependencies = [
  "bitflags 2.13.2",
  "bitstream-io",
