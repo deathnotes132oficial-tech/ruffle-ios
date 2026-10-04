@@ -436,23 +436,20 @@ pub fn app_residente_mb() -> Option<u64> {
     }
 }
 
-/// Manda o `malloc` devolver ao sistema o que ja esta livre.
-///
-/// Com centenas de milhares de pedacinhos nascendo e morrendo por segundo, as
-/// listas livres do `malloc` incham: a memoria nao e mais nossa, mas continua
-/// contando no nome do aplicativo — e e por esse numero que o iOS escolhe quem
-/// encerrar. Medido uma vez: 370 MB de diferenca entre o que o Rust tinha vivo
-/// e o que o sistema cobrava.
-///
-/// Devolve quantos MB sairam.
-pub fn devolver_ao_sistema() -> u64 {
-    extern "C" {
-        fn malloc_zone_pressure_relief(zona: *mut std::ffi::c_void, meta: usize) -> usize;
-    }
-    // Zona nula quer dizer "todas as zonas", que e o que se quer aqui.
-    let bytes = unsafe { malloc_zone_pressure_relief(std::ptr::null_mut(), 0) };
-    (bytes / (1024 * 1024)) as u64
-}
+// NAO ADIANTA PEDIR MEMORIA DE VOLTA AO malloc.
+//
+// Havia aqui uma chamada a `malloc_zone_pressure_relief`, apostando que as
+// listas livres do alocador estivessem segurando centenas de MB em nome do
+// aplicativo. Medido em oito avisos seguidos de memoria, ela devolveu
+// ZERO MB todas as vezes.
+//
+// A aposta nasceu de uma conta errada: eu comparava o que o Rust tinha vivo
+// com o medidor antigo, que inflava. Com os numeros certos a conta fecha
+// sozinha — `rust` mais `metal` dao quase exatamente o que o sistema cobra,
+// e nao sobra pilha escondida pra devolver.
+//
+// Fica o registro pra ninguem tentar de novo.
+
 
 // O QUE A MEDIDA ANTERIOR NAO RESPONDIA
 // -------------------------------------
@@ -618,8 +615,6 @@ pub fn aliviar(soltou_do_jogo: Option<String>) {
     let antes_app = app_residente_mb();
     let antes_rust = crate::alocador::vivo_mb();
 
-    let devolvido = devolver_ao_sistema();
-
     let depois_app = app_residente_mb();
     let caiu = match (antes_app, depois_app) {
         (Some(a), Some(d)) => format!("{} MB", a.saturating_sub(d)),
@@ -627,7 +622,7 @@ pub fn aliviar(soltou_do_jogo: Option<String>) {
     };
 
     anotar(&format!(
-        "ALIVIO: malloc devolveu {devolvido} MB | app caiu {caiu} | rust antes {antes_rust} MB depois {} MB{}",
+        "ALIVIO: app caiu {caiu} | rust antes {antes_rust} MB depois {} MB{}",
         crate::alocador::vivo_mb(),
         match soltou_do_jogo {
             Some(texto) => format!(" | {texto}"),
