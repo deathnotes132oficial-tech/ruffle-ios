@@ -475,7 +475,13 @@ impl PlayerView {
             self.ivars().ultima_medida.set(Some(agora));
             self.mostrar_memoria();
             // Os contadores do Ruffle so existem depois que o jogo sobe.
-            let contagem = if self.ivars().player.get().is_some() {
+            // A VARREDURA CONTINUA; A CONTAGEM NAO.
+            //
+            // Percorrer a biblioteca inteira somando texturas, malhas e tipos
+            // de figura serviu pra descobrir onde estava a memoria. A resposta
+            // veio, e manter isso rodando duas vezes por segundo passou a ser
+            // so custo. O que ficou e a limpeza, que conserta.
+            if self.ivars().player.get().is_some() {
                 // APERTOU: PEDE UMA COLETA COMPLETA ANTES DE MEDIR.
                 //
                 // O coletor do Ruffle se guia pelo tamanho dos objetos, e nao
@@ -488,18 +494,10 @@ impl PlayerView {
                 if folga < 1200 {
                     self.player_lock().coletar_tudo();
                 }
-                Some(self.player_lock().contagem_biblioteca())
-            } else {
-                None
-            };
-            crate::registro::anotar_memoria(contagem);
-            // PICO NOVO MERECE UMA LINHA SO DELE.
-            //
-            // O que mata nao e o patamar, sao os saltos: medidas seguidas
-            // mostraram 1160 MB e, menos de um segundo depois, 1959. Marcar
-            // o pico separado deixa esses saltos achaveis no registro sem ter
-            // que ler linha por linha.
-            crate::registro::marcar_pico();
+                self.player_lock().varredura();
+            }
+            crate::registro::anotar_memoria();
+
         }
 
         // O TECLADO, SE O JOGO PEDIU.

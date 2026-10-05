@@ -344,30 +344,24 @@ define_class!(
         // separa "o aplicativo estourou o proprio teto" de "o aparelho ficou
         // sem RAM e o sistema escolheu a maior vitima".
         //
-        // Nao ha o que fazer aqui alem de anotar: o Ruffle nao tem como
-        // devolver memoria sob demanda. Mas a anotacao aponta o caminho do
-        // conserto, e sem ela a gente continuaria adivinhando.
+        // O AVISO DO iOS AGE, E NAO SO ANOTA.
+        //
+        // O jogo solta o que estiver parado e manda o coletor passar. Tambem
+        // segura a fila de carregamento, que e de onde vem o pico: oito
+        // modulos sendo descomprimidos ao mesmo tempo foi o que levou o uso de
+        // 986 MB a 1213 MB em dois segundos.
+        //
+        // Nao se solta TUDO de proposito. A primeira versao disto fazia isso, e
+        // o jogo refazia na hora seguinte — a memoria da placa de video saltava
+        // de 37 pra 120 MB e o aviso voltava, cada volta custando um segundo de
+        // aplicativo parado.
         #[unsafe(method(didReceiveMemoryWarning))]
         fn didReceiveMemoryWarning(&self) {
             let _: () = unsafe { msg_send![super(self), didReceiveMemoryWarning] };
             crate::registro::anotar_aviso_de_memoria();
 
-            // AGORA O AVISO TAMBEM AGE, E NAO SO ANOTA.
-            //
-            // Primeiro o jogo solta o que puder (texturas e malhas paradas, e
-            // uma coleta completa); depois se manda o malloc devolver ao
-            // sistema o que ficou sobrando das listas livres dele. A ordem
-            // importa: o malloc so devolve o que ja esta livre, entao liberar
-            // antes e o que da o que devolver.
             let soltou = self.soltar_do_jogo();
             crate::registro::aliviar(soltou);
-
-            // O AVISO E O MELHOR INSTANTE QUE EXISTE.
-            //
-            // E o unico momento em que o sistema diz, de dentro, que a conta
-            // esta fechando. A linha periodica pode estar a um segundo daqui,
-            // e um segundo ja escondeu 900 MB numa sessao.
-            crate::registro::retrato("aviso de memoria do iOS");
         }
 
         #[unsafe(method(canBecomeFirstResponder))]

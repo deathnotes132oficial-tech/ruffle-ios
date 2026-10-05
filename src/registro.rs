@@ -481,7 +481,7 @@ static MENOR_FOLGA: AtomicU64 = AtomicU64::new(u64::MAX);
 ///
 /// Os contadores do Ruffle vem de fora porque so quem tem o jogo em maos
 /// consegue perguntar a ele.
-pub fn anotar_memoria(contagem: Option<String>) {
+pub fn anotar_memoria() {
     let Some(mb) = memoria_livre_mb() else {
         anotar("memoria livre: indisponivel (simulador)");
         return;
@@ -496,16 +496,6 @@ pub fn anotar_memoria(contagem: Option<String>) {
 
     let menor = MENOR_FOLGA.fetch_min(mb, Ordering::Relaxed).min(mb);
 
-    // A LINHA VEM PRONTA DO RUFFLE, DE PROPOSITO.
-    //
-    // Quem sabe o que existe pra contar e ele. Recebendo os numeros soltos,
-    // toda medida nova obrigava a mexer nos dois repositorios; recebendo o
-    // texto, ela mexe so no dele.
-    let numeros = match contagem {
-        Some(texto) => format!(" | {texto}"),
-        None => String::new(),
-    };
-
     let epoca = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -516,14 +506,6 @@ pub fn anotar_memoria(contagem: Option<String>) {
         Some(mb) => format!(" | metal {mb} MB"),
         None => String::new(),
     };
-
-    // O QUE O ALOCADOR SABE, EM TODA LINHA.
-    //
-    // "usado" e a conta do iOS: inclui a placa de video, o Objective-C e a
-    // fragmentacao. "rust" e so o que o nosso lado pediu e ainda nao
-    // devolveu. A diferenca entre os dois e o que diz se o buraco esta do
-    // nosso lado ou nao — e era justamente isso que faltava saber.
-    let alocador = crate::alocador::resumo();
 
     // OS DOIS LADOS DA MESMA MORTE.
     //
@@ -537,7 +519,7 @@ pub fn anotar_memoria(contagem: Option<String>) {
     let app = app_residente_mb().unwrap_or(usado);
 
     anotar(&format!(
-        "aparelho {aparelho} | app {app} MB | cota livre {mb} MB | minimo {menor} MB{metal}{ligado} | {alocador}{numeros}"
+        "aparelho {aparelho} | app {app} MB | cota livre {mb} MB | minimo {menor} MB{metal}{ligado}"
     ));
 }
 
@@ -572,36 +554,6 @@ pub fn usado_mb() -> Option<u64> {
 /// ESTE AVISO E A RESPOSTA QUE FALTAVA. Se ele aparecer antes da morte, foi o
 /// aparelho que apertou e o sistema escolheu a maior vitima. Se a sessao
 /// terminar sem nenhum, o aplicativo estourou sozinho.
-/// O MAIOR USO JA VISTO, e a linha que o registra.
-static MAIOR_USO: AtomicU64 = AtomicU64::new(0);
-
-/// Marca quando o uso bate um recorde, e so entao.
-///
-/// O que derruba o aplicativo nao e o patamar: e o salto. Duas medidas
-/// seguidas mostraram 1160 MB e, menos de um segundo depois, 1959 MB — e a
-/// morte coube entre duas dessas. Uma linha por recorde deixa os saltos
-/// achaveis sem ter que ler o registro inteiro.
-///
-/// So vale subida de 50 MB pra cima: o numero do iOS oscila dezenas de MB
-/// sozinho, e recorde a cada oscilacao encheria o registro de ruido.
-pub fn marcar_pico() {
-    let Some(usado) = usado_mb() else {
-        return;
-    };
-
-    let maior = MAIOR_USO.load(Ordering::Relaxed);
-    if usado < maior + 50 {
-        return;
-    }
-    MAIOR_USO.store(usado, Ordering::Relaxed);
-
-    // O primeiro "recorde" e so a abertura, e nao diz nada.
-    if maior == 0 {
-        return;
-    }
-    retrato(&format!("PICO {usado} MB (antes {maior} MB)"));
-}
-
 /// DEVOLVER O QUE DA, AGORA.
 ///
 /// O iOS avisa antes de encerrar um aplicativo — e esse aviso e a unica chance
@@ -612,33 +564,20 @@ pub fn marcar_pico() {
 /// Anota quanto saiu em cada passo, de proposito: se um deles nao render nada,
 /// isso aparece no registro e a gente para de insistir nele.
 pub fn aliviar(soltou_do_jogo: Option<String>) {
-    let antes_app = app_residente_mb();
-    let antes_rust = crate::alocador::vivo_mb();
-
-    let depois_app = app_residente_mb();
-    let caiu = match (antes_app, depois_app) {
+    let antes = app_residente_mb();
+    let depois = app_residente_mb();
+    let caiu = match (antes, depois) {
         (Some(a), Some(d)) => format!("{} MB", a.saturating_sub(d)),
         _ => "?".to_string(),
     };
 
     anotar(&format!(
-        "ALIVIO: app caiu {caiu} | rust antes {antes_rust} MB depois {} MB{}",
-        crate::alocador::vivo_mb(),
+        "ALIVIO: app caiu {caiu}{}",
         match soltou_do_jogo {
             Some(texto) => format!(" | {texto}"),
             None => String::new(),
         }
     ));
-}
-
-/// O retrato completo, pra quando algo importante acontece.
-///
-/// E a mesma informacao da linha de sempre, mas pedida de proposito nos dois
-/// momentos que contam: quando o iOS avisa que esta apertando, e quando se
-/// bate um pico novo. Nesses instantes a linha periodica pode estar a um
-/// segundo de distancia — e um segundo, aqui, ja escondeu 900 MB.
-pub fn retrato(motivo: &str) {
-    anotar(&format!("--- {motivo} --- {}", crate::alocador::resumo()));
 }
 
 pub fn anotar_aviso_de_memoria() {
