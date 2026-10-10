@@ -486,6 +486,27 @@ impl LibraryController {
             let _: () = msg_send![self, setToolbarItems: &*itens, animated: false];
             if let Some(nav) = self.navigationController() {
                 let _: () = msg_send![&*nav, setToolbarHidden: false, animated: false];
+
+                // A BARRA DE BAIXO COM A COR DA DE CIMA.
+                //
+                // O storyboard pinta a barra de cima de dourado e nao fala da
+                // de baixo, que ficava com o azul padrao do sistema: duas
+                // barras de cores diferentes na mesma tela, como se fossem de
+                // dois aplicativos.
+                //
+                // tintColor, e nao barTintColor: desde o iOS 15 a cor de
+                // FUNDO de uma barra so pega por objeto de aparencia, e a
+                // propriedade antiga e ignorada calada. A cor do TEXTO
+                // continua valendo direta, e e dela que se trata aqui.
+                let nome = NSString::from_str("dn-ouro");
+                let ouro: Option<Retained<AnyObject>> =
+                    msg_send![class!(UIColor), colorNamed: &*nome];
+                if let Some(ouro) = ouro {
+                    let barra: Option<Retained<AnyObject>> = msg_send![&*nav, toolbar];
+                    if let Some(barra) = barra {
+                        let _: () = msg_send![&*barra, setTintColor: &*ouro];
+                    }
+                }
             }
         }
     }
