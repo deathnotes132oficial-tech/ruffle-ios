@@ -196,6 +196,13 @@ jobs:
       # SO IPHONE (TARGETED_DEVICE_FAMILY=1): o projeto vem marcado tambem pra
       # iPad e visor, e app de iPad que aceita uma orientacao so e recusado na
       # conferencia da Apple.
+      #
+      # MODO ESCURO SEMPRE (UIUserInterfaceStyle=Dark): as cores do aplicativo
+      # sao fixas — o mesmo azul no claro e no escuro — mas os textos das
+      # linhas da lista nao tem cor propria e herdam a do sistema, que e PRETA
+      # no modo claro. Preto sobre azul escuro quase nao se le, e o aparelho
+      # sai de fabrica no modo claro: foi assim que o revisor da Apple viu a
+      # tela de abertura.
       - name: Compilar
         run: |
           set -o pipefail
@@ -219,6 +226,7 @@ jobs:
             INFOPLIST_KEY_CFBundleIconName=AppIcon \
             INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
             INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
+            INFOPLIST_KEY_UIUserInterfaceStyle=Dark \
             INFOPLIST_KEY_ITSAppUsesNonExemptEncryption=NO \
             archive
 
