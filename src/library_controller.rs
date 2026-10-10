@@ -248,7 +248,26 @@ define_class!(
             _table_view: &UITableView,
             _section: NSInteger,
         ) -> Option<Retained<NSString>> {
-            Some(NSString::from_str("Library"))
+            Some(NSString::from_str("Arquivos neste aparelho"))
+        }
+
+        /// A LINHA QUE ENSINA, EMBAIXO DA LISTA.
+        ///
+        /// Os caminhos de entrada do aplicativo, escritos. Sem ela a tela
+        /// mostra uma lista e dois botoes de canto, e quem nunca usou tem que
+        /// adivinhar que o "+" procura arquivo no aparelho e que o endereco de
+        /// um jogo entra colado.
+        #[unsafe(method_id(tableView:titleForFooterInSection:))]
+        fn tableView_titleForFooterInSection(
+            &self,
+            _table_view: &UITableView,
+            _section: NSInteger,
+        ) -> Option<Retained<NSString>> {
+            Some(NSString::from_str(
+                "Toque num arquivo para tocar.\n\nUse + para abrir um arquivo \
+                 .swf guardado no aparelho, ou \"Colar endereço\" para abrir \
+                 um .swf que esteja na internet.",
+            ))
         }
 
         #[unsafe(method(tableView:commitEditingStyle:forRowAtIndexPath:))]
@@ -452,16 +471,16 @@ impl LibraryController {
             }
         };
 
-        let endereco = botao("Abrir endereço", sel!(abrirEndereco:));
-        let registro = botao("Registro", sel!(mostrarRegistro:));
+        // DOIS BOTOES, NAO TRES.
+        //
+        // O "Registro" copiava o registro de memoria da sessao pra area de
+        // transferencia. Era um controle de desenvolvedor no meio da tela
+        // principal de um aplicativo de jogador, e as medicoes que ele servia
+        // pra ler sairam do aplicativo. Pra trazer de volta basta uma linha:
+        // o metodo mostrarRegistro: continua aqui embaixo.
+        let endereco = botao("Colar endereço", sel!(abrirEndereco:));
         let licencas = botao("Licenças", sel!(mostrarLicencas:));
-        let itens = NSArray::from_retained_slice(&[
-            endereco,
-            espaco(),
-            registro,
-            espaco(),
-            licencas,
-        ]);
+        let itens = NSArray::from_retained_slice(&[endereco, espaco(), licencas]);
 
         unsafe {
             let _: () = msg_send![self, setToolbarItems: &*itens, animated: false];
@@ -716,9 +735,9 @@ impl LibraryController {
         let is_editing = !table_view.isEditing();
         table_view.setEditing_animated(is_editing, true);
         button.setTitle(Some(if is_editing {
-            ns_string!("Done")
+            ns_string!("Pronto")
         } else {
-            ns_string!("Edit")
+            ns_string!("Editar")
         }));
     }
 
@@ -740,7 +759,7 @@ impl LibraryController {
                     &url.filePathURL().unwrap().lastPathComponent().unwrap(),
                 ));
             } else {
-                subtitle.setText(Some(ns_string!("Unknown")));
+                subtitle.setText(Some(ns_string!("Arquivo deste aparelho")));
             }
         } else {
             subtitle.setText(Some(&url.absoluteString().unwrap()));
