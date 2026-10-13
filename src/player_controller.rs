@@ -1121,6 +1121,25 @@ impl PlayerController {
             };
             botao.setHidden(!visivel);
         }
+        drop(guardados);
+
+        // ── O MOUSE TAMBEM SOME, E ISSO FALTAVA ──
+        //
+        // A area do mouse e a setinha nao moram na lista `controles` — sao
+        // ivars proprios, criados pelo `criar_mouse`. Entao o laco acima nunca
+        // os tocou, e no modo escondido eles ficavam na tela sozinhos: um
+        // retangulo de uns 230 por 250 encostado na borda direita, mais a
+        // seta, por cima do conteudo.
+        //
+        // Ou seja, "esconder os controles" escondia treze botoes e deixava o
+        // maior de todos aceso. Numa tela que a Apple vai abrir pra julgar se
+        // esta limpa, isso e a diferenca entre passar e nao passar.
+        if let Some(area) = self.ivars().area_mouse.borrow().as_ref() {
+            area.setHidden(escondidos);
+        }
+        if let Some(seta) = self.ivars().seta.borrow().as_ref() {
+            seta.setHidden(escondidos);
+        }
     }
 
     /// O nome da tecla, pras que nao produzem caractere.
