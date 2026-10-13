@@ -1,4 +1,4 @@
-use std::cell::{Cell, OnceCell, RefCell};
+use std::cell::{Cell, OnceCell};
 use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
@@ -6,15 +6,15 @@ use std::time::Instant;
 use objc2::rc::{Allocated, Retained};
 use objc2::runtime::AnyClass;
 use objc2::{define_class, msg_send, sel, ClassType, DefinedClass as _};
-use objc2_core_foundation::{CGPoint, CGRect, CGSize};
+use objc2_core_foundation::CGRect;
 use objc2_foundation::{
     MainThreadMarker, NSCoder, NSDate, NSObjectProtocol, NSRunLoop, NSRunLoopCommonModes, NSSet,
     NSString, NSTimer,
 };
 use objc2_quartz_core::{CALayer, CALayerDelegate, CAMetalLayer};
 use objc2_ui_kit::{
-    UIColor, UIEvent, UIKey, UIKeyInput, UILabel, UIPress, UIPressPhase, UIPressesEvent,
-    UITextInputTraits, UITouch, UITouchPhase, UIView, UIViewContentMode,
+    UIEvent, UIKey, UIKeyInput, UIPress, UIPressPhase, UIPressesEvent, UITextInputTraits, UITouch,
+    UITouchPhase, UIView, UIViewContentMode,
 };
 use ruffle_core::events::{
     KeyDescriptor, KeyLocation, LogicalKey, MouseButton, NamedKey, PhysicalKey, TextControlCode,
@@ -66,10 +66,6 @@ pub struct Ivars {
     /// quadro enquanto o cursor estivesse no campo — 60 pedidos por segundo
     /// pra uma coisa que ja esta aberta.
     mostrando_teclado: Cell<bool>,
-    /// O numero de memoria no canto da tela.
-    ///
-    /// Existe enquanto a memoria for o assunto. Sai junto com o resto das
-    /// medidas, quando o aplicativo parar de fechar.
 }
 
 impl fmt::Debug for Ivars {
