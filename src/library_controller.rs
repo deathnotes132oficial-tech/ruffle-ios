@@ -631,86 +631,23 @@ impl LibraryController {
         }
     }
 
-    /// A BARRA DE BAIXO: ENDERECO E LICENCAS.
+    /// NAO HA MAIS BARRA DE BAIXO.
     ///
-    /// Embaixo, e nao em cima, porque a barra de cima ja vem montada pelo
-    /// storyboard com o "+" e o "Editar". Mexer nela seria adivinhar o que ja
-    /// esta la; a de baixo esta vazia e nao briga com ninguem.
+    /// Ela tinha "Colar endereço" e "Licenças". O primeiro subiu pro cabecalho
+    /// e virou botao escrito; o segundo foi pra barra de cima, do lado do
+    /// nome.
+    ///
+    /// O motivo de ela sumir por inteiro: no iOS 26 essa barra FLUTUA sobre o
+    /// conteudo. Com o rodape de texto, ela cobria o texto; sem ele, a foto do
+    /// simulador mostrou a pilula de "Licenças" pousada em cima da linha do
+    /// arquivo. Enquanto existir uma barra flutuante, sempre havera alguma
+    /// coisa embaixo dela.
+    ///
+    /// Sem barra, nao ha o que cobrir.
     fn montar_barra_de_baixo(&self) {
-        let mtm = MainThreadMarker::from(self);
-
-        let botao = |titulo: &str, acao| -> Retained<UIBarButtonItem> {
-            let texto = NSString::from_str(titulo);
-            unsafe {
-                msg_send![
-                    mtm.alloc::<UIBarButtonItem>(),
-                    initWithTitle: &*texto,
-                    style: 0isize,          // UIBarButtonItemStylePlain
-                    target: self,
-                    action: acao,
-                ]
-            }
-        };
-
-        // O espaco flexivel separa os botoes. E preciso um objeto NOVO pra
-        // cada vao: o mesmo item nao pode aparecer duas vezes na barra.
-        let espaco = || -> Retained<UIBarButtonItem> {
-            unsafe {
-                msg_send![
-                    mtm.alloc::<UIBarButtonItem>(),
-                    initWithBarButtonSystemItem: 5isize,   // FlexibleSpace
-                    target: Option::<&AnyObject>::None,
-                    action: Option::<objc2::runtime::Sel>::None,
-                ]
-            }
-        };
-
-        // DOIS BOTOES, NAO TRES.
-        //
-        // O "Registro" copiava o registro de memoria da sessao pra area de
-        // transferencia. Era um controle de desenvolvedor no meio da tela
-        // principal de um aplicativo de jogador, e as medicoes que ele servia
-        // pra ler sairam do aplicativo. Pra trazer de volta basta uma linha:
-        // o metodo mostrarRegistro: continua aqui embaixo.
-        // SO AS LICENCAS AQUI EMBAIXO.
-        //
-        // "Colar endereço" subiu pro cabecalho, junto com "Abrir arquivo", e
-        // virou botao escrito por extenso. O que sobra nesta barra e o aviso
-        // que a licenca MIT obriga: coisa que ninguem procura e que nao pode
-        // sumir.
-        //
-        // E o rodape de texto saiu de vez. No iOS 26 esta barra FLUTUA sobre
-        // o conteudo, entao qualquer texto no fim da tabela passava por tras
-        // das pilulas. Foi o que a foto do simulador mostrou depois do
-        // primeiro conserto: eu tinha trocado uma sobreposicao por outra.
-        let licencas = botao("Licenças", sel!(mostrarLicencas:));
-        let itens = NSArray::from_retained_slice(&[espaco(), licencas]);
-
         unsafe {
-            let _: () = msg_send![self, setToolbarItems: &*itens, animated: false];
             if let Some(nav) = self.navigationController() {
-                let _: () = msg_send![&*nav, setToolbarHidden: false, animated: false];
-
-                // A BARRA DE BAIXO COM A COR DA DE CIMA.
-                //
-                // O storyboard pinta a barra de cima de dourado e nao fala da
-                // de baixo, que ficava com o azul padrao do sistema: duas
-                // barras de cores diferentes na mesma tela, como se fossem de
-                // dois aplicativos.
-                //
-                // tintColor, e nao barTintColor: desde o iOS 15 a cor de
-                // FUNDO de uma barra so pega por objeto de aparencia, e a
-                // propriedade antiga e ignorada calada. A cor do TEXTO
-                // continua valendo direta, e e dela que se trata aqui.
-                let nome = NSString::from_str("dn-ouro");
-                let ouro: Option<Retained<AnyObject>> =
-                    msg_send![class!(UIColor), colorNamed: &*nome];
-                if let Some(ouro) = ouro {
-                    let barra: Option<Retained<AnyObject>> = msg_send![&*nav, toolbar];
-                    if let Some(barra) = barra {
-                        let _: () = msg_send![&*barra, setTintColor: &*ouro];
-                    }
-                }
+                let _: () = msg_send![&*nav, setToolbarHidden: true, animated: false];
             }
         }
     }

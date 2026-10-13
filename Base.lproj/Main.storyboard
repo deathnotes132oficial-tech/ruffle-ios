@@ -103,6 +103,11 @@
                                 <action selector="toggleEditing:" destination="jhe-Vq-qF4" id="9pG-WT-esi"/>
                             </connections>
                         </barButtonItem>
+                        <barButtonItem key="rightBarButtonItem" title="Licenças" id="lic-en-cas">
+                            <connections>
+                                <action selector="mostrarLicencas:" destination="jhe-Vq-qF4" id="lic-ac-ao1"/>
+                            </connections>
+                        </barButtonItem>
                     </navigationItem>
                 </tableViewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="Ska-Zd-pi7" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
