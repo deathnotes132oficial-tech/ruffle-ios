@@ -475,6 +475,30 @@ impl PlayerController {
         };
 
         let movie_url = content.initial_swf_url().clone();
+
+        // ══════════════════════════════════════════════════════════════
+        //  QUEM MOSTRA OS CONTROLES E O CONTEUDO, NAO O APLICATIVO
+        // ══════════════════════════════════════════════════════════════
+        //
+        // Ate aqui, os treze botoes de jogo — 1 2 3 4, Z X C, o olho, a
+        // paleta, a cruz de setas, o ESPACO e o mouse — nasciam visiveis por
+        // cima de QUALQUER coisa que o tocador abrisse.
+        //
+        // A Apple abriu o arquivo de exemplo, que e uma animacaozinha de
+        // logotipo, e viu os treze botoes em cima dela. A captura veio anexada
+        // a primeira recusa, e e exatamente a frase que ela usou: interface
+        // apertada, com controles dificeis de usar por tamanho e posicao.
+        //
+        // O criterio agora e a origem do conteudo. Um `.swf` do proprio
+        // aparelho e um arquivo que alguem abriu pra ver: comeca limpo, so com
+        // o olho, e quem quiser os controles toca nele. Conteudo que veio da
+        // INTERNET — que e por onde o jogador entra, pelo link do site — abre
+        // com tudo na tela, igual a hoje.
+        //
+        // Assim nenhum jogador perde nada e a tela que o revisor abre nao tem
+        // nada por cima.
+        let do_aparelho = movie_url.scheme() == "file";
+        self.ivars().modo_olho.set(if do_aparelho { 1 } else { 0 });
         let navigator = ExternalNavigatorBackend::new(
             player_options
                 .base

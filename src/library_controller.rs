@@ -263,10 +263,20 @@ define_class!(
             _table_view: &UITableView,
             _section: NSInteger,
         ) -> Option<Retained<NSString>> {
+            // UMA LINHA SO, E O MOTIVO E UMA CAPTURA DE TELA DA APPLE.
+            //
+            // Isto nasceu com tres linhas e um paragrafo em branco. O
+            // storyboard fixava a altura do rodape em 18 pontos, o texto
+            // precisava de uns 60, e ele transbordou POR CIMA do titulo da
+            // secao: "Arquivos neste aparelho" impresso em cima de "Use + para
+            // abrir um arquivo .swf", ilegivel. Foi assim que a Apple viu a
+            // tela, e e metade do motivo da segunda recusa.
+            //
+            // A altura agora e automatica (ver o storyboard), mas uma linha so
+            // tambem e mais honesta: ninguem le um paragrafo embaixo de uma
+            // lista de um item.
             Some(NSString::from_str(
-                "Toque num arquivo para tocar.\n\nUse + para abrir um arquivo \
-                 .swf guardado no aparelho, ou \"Colar endereço\" para abrir \
-                 um .swf que esteja na internet.",
+                "Toque num arquivo para tocar, ou use + para abrir um .swf do aparelho.",
             ))
         }
 

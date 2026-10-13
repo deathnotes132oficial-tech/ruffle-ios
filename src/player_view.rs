@@ -70,7 +70,6 @@ pub struct Ivars {
     ///
     /// Existe enquanto a memoria for o assunto. Sai junto com o resto das
     /// medidas, quando o aplicativo parar de fechar.
-    medidor: RefCell<Option<Retained<UILabel>>>,
 }
 
 impl fmt::Debug for Ivars {
@@ -473,7 +472,6 @@ impl PlayerView {
         };
         if medir {
             self.ivars().ultima_medida.set(Some(agora));
-            self.mostrar_memoria();
             // Os contadores do Ruffle so existem depois que o jogo sobe.
             // A VARREDURA CONTINUA; A CONTAGEM NAO.
             //
@@ -579,56 +577,6 @@ impl PlayerView {
     pub fn alternar_teclado(&self) {
         let agora = self.ivars().mostrando_teclado.get();
         self.ivars().teclado_manual.set(Some(!agora));
-    }
-
-    /// O numero de memoria no canto de cima, pro jogador acompanhar.
-    ///
-    /// Nasce na primeira medida, porque antes disso nao ha o que mostrar. Fica
-    /// na esquerda: a direita e onde moram os controles do jogo e os nossos.
-    fn mostrar_memoria(&self) {
-        let Some(usado) = crate::registro::usado_mb() else {
-            return;
-        };
-
-        let mtm = MainThreadMarker::from(self);
-        let mut guardado = self.ivars().medidor.borrow_mut();
-
-        // NO CANTO DIREITO, E RECALCULADO SEMPRE.
-        //
-        // Na esquerda ele tapava os numeros do jogo. O canto vem da largura de
-        // agora, e nao de uma conta feita uma vez, porque a tela gira e muda de
-        // tamanho — com posicao fixa ele sairia da tela ou deixaria de encostar.
-        let largura = 150.0;
-        let onde = CGRect::new(
-            CGPoint::new(self.bounds().size.width - largura - 12.0, 8.0),
-            CGSize::new(largura, 26.0),
-        );
-
-        if guardado.is_none() {
-            let etiqueta = unsafe { UILabel::initWithFrame(mtm.alloc(), onde) };
-            unsafe {
-                etiqueta.setTextColor(Some(&UIColor::whiteColor()));
-                etiqueta.setBackgroundColor(Some(&UIColor::colorWithRed_green_blue_alpha(
-                    0.0, 0.0, 0.0, 0.45,
-                )));
-            }
-            // Nao pode roubar toque do jogo: e so um numero.
-            etiqueta.setUserInteractionEnabled(false);
-            self.addSubview(&etiqueta);
-            *guardado = Some(etiqueta);
-        }
-
-        if let Some(etiqueta) = guardado.as_ref() {
-            etiqueta.setFrame(onde);
-            let texto = NSString::from_str(&format!("{usado} MB "));
-            unsafe {
-                // 2 e NSTextAlignmentRight. O numero cru em vez do nome da
-                // traducao: o seletor do Objective-C nao muda de versao pra
-                // versao, e o nome da traducao pode mudar.
-                let _: () = msg_send![&**etiqueta, setTextAlignment: 2isize];
-                etiqueta.setText(Some(&texto));
-            }
-        }
     }
 
     /// Houve toque ha pouco?
