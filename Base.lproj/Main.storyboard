@@ -44,10 +44,6 @@
                         <color key="tintColor" name="dn-ouro"/>
                         <color key="sectionIndexColor" name="dn-ouro"/>
                         <color key="sectionIndexTrackingBackgroundColor" name="dn-azul-6"/>
-                        <view key="tableHeaderView" contentMode="scaleToFill" id="qwq-LQ-yFa" userLabel="Logo View" customClass="PlayerView">
-                            <rect key="frame" x="0.0" y="0.0" width="393" height="96"/>
-                            <autoresizingMask key="autoresizingMask" widthSizable="YES" flexibleMaxY="YES"/>
-                        </view>
                         <prototypes>
                             <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" insetsLayoutMarginsFromSafeArea="NO" selectionStyle="default" accessoryType="disclosureIndicator" hidesAccessoryWhenEditing="NO" indentationLevel="1" indentationWidth="0.0" reuseIdentifier="library-item" id="uxd-VR-Jis">
                                 <rect key="frame" x="0.0" y="225.33333206176758" width="393" height="70"/>
@@ -101,21 +97,13 @@
                         </connections>
                     </tableView>
                     <toolbarItems/>
-                    <navigationItem key="navigationItem" id="wmY-4r-Pvd">
+                    <navigationItem key="navigationItem" title="CF Client" id="wmY-4r-Pvd">
                         <barButtonItem key="leftBarButtonItem" title="Editar" id="4wX-a8-qE5">
                             <connections>
                                 <action selector="toggleEditing:" destination="jhe-Vq-qF4" id="9pG-WT-esi"/>
                             </connections>
                         </barButtonItem>
-                        <barButtonItem key="rightBarButtonItem" systemItem="add" id="h8u-cx-2eE">
-                            <connections>
-                                <action selector="showDocumentPicker:" destination="jhe-Vq-qF4" id="DNV-X3-jh9"/>
-                            </connections>
-                        </barButtonItem>
                     </navigationItem>
-                    <connections>
-                        <outlet property="logoView" destination="qwq-LQ-yFa" id="j9s-2r-urh"/>
-                    </connections>
                 </tableViewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="Ska-Zd-pi7" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
                 <view contentMode="scaleToFill" id="GCg-hc-Y64">

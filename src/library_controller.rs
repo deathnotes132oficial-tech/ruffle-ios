@@ -1,4 +1,4 @@
-use std::cell::OnceCell;
+use std::cell::{OnceCell, RefCell};
 
 use objc2::rc::{Allocated, Retained};
 use objc2::runtime::{AnyObject, ProtocolObject};
@@ -11,10 +11,12 @@ use objc2_foundation::{
     ns_string, MainThreadMarker, NSArray, NSBundle, NSCoder, NSIndexPath, NSInteger, NSObject,
     NSObjectProtocol, NSString, NSURL,
 };
+use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_ui_kit::{
-    NSDataAsset, UIBarButtonItem, UIDocumentPickerDelegate, UIDocumentPickerViewController,
-    UILabel, UIPasteboard, UITableView, UITableViewCell, UITableViewCellEditingStyle,
-    UITableViewController, UITableViewDataSource, UITableViewRowAnimation,
+    NSDataAsset, UIBarButtonItem, UIButton, UIButtonType, UIColor, UIControlEvents,
+    UIControlState, UIDocumentPickerDelegate, UIDocumentPickerViewController, UIFont, UILabel,
+    UIPasteboard, UITableView, UITableViewCell, UITableViewCellEditingStyle,
+    UITableViewController, UITableViewDataSource, UITableViewRowAnimation, UIView,
 };
 #[allow(deprecated)]
 use objc2_ui_kit::{UIDocumentPickerMode, UIStoryboardSegue};
@@ -62,6 +64,17 @@ pub const RUF_UTI: &str = "com.example.rs.ruffle.bundle";
 #[derive(Debug)]
 pub struct Ivars {
     logo_view: OnceCell<Retained<PlayerView>>,
+    /// O cabecalho que diz o que o aplicativo faz. Ver `montar_cabecalho`.
+    cabecalho: RefCell<Option<Retained<UIView>>>,
+    /// As pecas dele, guardadas pra recolocar quando a largura mudar.
+    pecas: RefCell<
+        Option<(
+            Retained<UILabel>,
+            Retained<UILabel>,
+            Retained<UIButton>,
+            Retained<UIButton>,
+        )>,
+    >,
     fetched_movies: Retained<NSFetchedResultsController<Movie>>,
 }
 
@@ -85,6 +98,8 @@ define_class!(
             tracing::info!("library init");
             let this = this.set_ivars(Ivars {
                 logo_view: Default::default(),
+                cabecalho: RefCell::new(None),
+                pecas: RefCell::new(None),
                 fetched_movies: storage::all_movies(),
             });
             let this: Retained<Self> = unsafe {
@@ -103,6 +118,8 @@ define_class!(
             tracing::info!("library init");
             let this = this.set_ivars(Ivars {
                 logo_view: Default::default(),
+                cabecalho: RefCell::new(None),
+                pecas: RefCell::new(None),
                 fetched_movies: storage::all_movies(),
             });
             let this: Option<Retained<Self>> =
@@ -251,35 +268,6 @@ define_class!(
             Some(NSString::from_str("Arquivos neste aparelho"))
         }
 
-        /// A LINHA QUE ENSINA, EMBAIXO DA LISTA.
-        ///
-        /// Os caminhos de entrada do aplicativo, escritos. Sem ela a tela
-        /// mostra uma lista e dois botoes de canto, e quem nunca usou tem que
-        /// adivinhar que o "+" procura arquivo no aparelho e que o endereco de
-        /// um jogo entra colado.
-        #[unsafe(method_id(tableView:titleForFooterInSection:))]
-        fn tableView_titleForFooterInSection(
-            &self,
-            _table_view: &UITableView,
-            _section: NSInteger,
-        ) -> Option<Retained<NSString>> {
-            // UMA LINHA SO, E O MOTIVO E UMA CAPTURA DE TELA DA APPLE.
-            //
-            // Isto nasceu com tres linhas e um paragrafo em branco. O
-            // storyboard fixava a altura do rodape em 18 pontos, o texto
-            // precisava de uns 60, e ele transbordou POR CIMA do titulo da
-            // secao: "Arquivos neste aparelho" impresso em cima de "Use + para
-            // abrir um arquivo .swf", ilegivel. Foi assim que a Apple viu a
-            // tela, e e metade do motivo da segunda recusa.
-            //
-            // A altura agora e automatica (ver o storyboard), mas uma linha so
-            // tambem e mais honesta: ninguem le um paragrafo embaixo de uma
-            // lista de um item.
-            Some(NSString::from_str(
-                "Toque num arquivo para tocar, ou use + para abrir um .swf do aparelho.",
-            ))
-        }
-
         #[unsafe(method(tableView:commitEditingStyle:forRowAtIndexPath:))]
         fn tableView_commitEditingStyle_forRowAtIndexPath(
             &self,
@@ -378,13 +366,22 @@ define_class!(
 );
 
 impl LibraryController {
-    fn logo_view(&self) -> &PlayerView {
-        self.ivars().logo_view.get().expect("logo view initialized")
+    /// A ANIMACAO PODE NAO EXISTIR MAIS.
+    ///
+    /// Ela era o cabecalho da tabela: uma faixa preta de 96 pontos com um
+    /// logotipo de 40 pixels perdido no meio, ocupando um quarto da tela. Saiu
+    /// do storyboard, e com ela foi embora a unica fonte de `logo_view`.
+    ///
+    /// Entao isto devolve Option e quem chama confere. Antes era um `expect`,
+    /// e um `expect` aqui derrubaria o aplicativo no arranque.
+    fn logo_view(&self) -> Option<&PlayerView> {
+        self.ivars().logo_view.get().map(|v| &**v)
     }
 
     fn view_did_load(&self) {
         tracing::info!("library viewDidLoad");
 
+        self.montar_cabecalho();
         self.montar_barra_de_baixo();
         self.garantir_exemplo();
         self.setup_logo();
@@ -447,6 +444,172 @@ impl LibraryController {
         }
     }
 
+    /// O CABECALHO QUE DIZ O QUE O APLICATIVO FAZ.
+    ///
+    /// ── O QUE ESTAVA AQUI ──
+    ///
+    /// Uma PlayerView de 96 pontos tocando a animacao do logotipo: uma faixa
+    /// preta ocupando um quarto da tela, com um desenho de 40 pixels perdido
+    /// no meio dela. Em cima, "Editar" e "+" nos cantos. Nada na tela dizia o
+    /// que o aplicativo e, nem o que fazer ali.
+    ///
+    /// A Apple recusou duas vezes por isso: "interface apertada ou disposta de
+    /// um jeito que dificulta completar tarefas".
+    ///
+    /// ── O QUE ENTRA ──
+    ///
+    /// Uma linha dizendo o que o aplicativo toca, e as duas acoes escritas por
+    /// extenso, grandes o bastante pra se acertar com o dedo. A tarefa deixa
+    /// de ser adivinhacao.
+    ///
+    /// ── POR QUE NA MAO, E NAO PELO STORYBOARD ──
+    ///
+    /// O storyboard fixava altura de rodape em 18 pontos e o texto precisava
+    /// de 60; corrigido isso, a barra de baixo do iOS 26 passou a flutuar
+    /// sobre o conteudo e cobriu o mesmo texto. Duas sobreposicoes seguidas,
+    /// as duas por eu depender de medida automatica que nao controlo. Aqui
+    /// cada peca tem posicao e tamanho que eu escrevo, e sobrepor vira
+    /// impossivel em vez de improvavel.
+    fn montar_cabecalho(&self) {
+        let mtm = MainThreadMarker::from(self);
+
+        let fundo = unsafe { UIView::initWithFrame(mtm.alloc(), CGRect::ZERO) };
+
+        // A marca, pequena e no canto, em vez de uma faixa preta.
+        let marca = unsafe { UILabel::initWithFrame(mtm.alloc(), CGRect::ZERO) };
+        unsafe {
+            marca.setText(Some(ns_string!("DN")));
+            marca.setFont(Some(&UIFont::boldSystemFontOfSize(26.0)));
+            if let Some(ouro) = Self::cor("dn-ouro") {
+                marca.setTextColor(Some(&ouro));
+            }
+        }
+        fundo.addSubview(&marca);
+
+        let frase = unsafe { UILabel::initWithFrame(mtm.alloc(), CGRect::ZERO) };
+        unsafe {
+            frase.setText(Some(&NSString::from_str(
+                "Toca arquivos Flash (.swf) do seu aparelho ou da internet.",
+            )));
+            frase.setFont(Some(&UIFont::systemFontOfSize(15.0)));
+            frase.setNumberOfLines(2);
+            frase.setTextColor(Some(&UIColor::colorWithWhite_alpha(1.0, 0.75)));
+        }
+        fundo.addSubview(&frase);
+
+        let abrir = self.botao_grande("Abrir arquivo .swf", sel!(showDocumentPicker:), true);
+        let colar = self.botao_grande("Colar endereço", sel!(abrirEndereco:), false);
+        fundo.addSubview(&abrir);
+        fundo.addSubview(&colar);
+
+        *self.ivars().cabecalho.borrow_mut() = Some(fundo);
+        *self.ivars().pecas.borrow_mut() = Some((marca, frase, abrir, colar));
+        self.posicionar_cabecalho();
+    }
+
+    /// Um botao de verdade: alto o bastante pro dedo, com o texto escrito.
+    fn botao_grande(
+        &self,
+        titulo: &str,
+        acao: objc2::runtime::Sel,
+        cheio: bool,
+    ) -> Retained<UIButton> {
+        let mtm = MainThreadMarker::from(self);
+        let b = unsafe { UIButton::buttonWithType(UIButtonType::System, mtm) };
+        let texto = NSString::from_str(titulo);
+        let ouro = Self::cor("dn-ouro");
+
+        unsafe {
+            b.setTitle_forState(Some(&texto), UIControlState::Normal);
+            if let Some(rotulo) = b.titleLabel() {
+                rotulo.setFont(Some(&UIFont::boldSystemFontOfSize(17.0)));
+            }
+            if cheio {
+                if let Some(ouro) = ouro.as_ref() {
+                    b.setBackgroundColor(Some(ouro));
+                }
+                // Texto escuro sobre o dourado: contraste de leitura.
+                b.setTitleColor_forState(
+                    Some(&UIColor::colorWithRed_green_blue_alpha(0.15, 0.20, 0.31, 1.0)),
+                    UIControlState::Normal,
+                );
+            } else if let Some(ouro) = ouro.as_ref() {
+                b.setTitleColor_forState(Some(ouro), UIControlState::Normal);
+                let cg: *mut objc2::runtime::AnyObject = msg_send![&**ouro, CGColor];
+                let _: () = msg_send![&*b.layer(), setBorderColor: cg];
+                b.layer().setBorderWidth(1.5);
+            }
+            b.layer().setCornerRadius(12.0);
+            b.addTarget_action_forControlEvents(Some(self), acao, UIControlEvents::TouchUpInside);
+        }
+        b
+    }
+
+    /// Uma cor do catalogo, pelo nome. None quando ela nao existir.
+    fn cor(nome: &str) -> Option<Retained<UIColor>> {
+        let n = NSString::from_str(nome);
+        unsafe { msg_send![class!(UIColor), colorNamed: &*n] }
+    }
+
+    /// AS MEDIDAS, REFEITAS SEMPRE QUE A LARGURA MUDA.
+    ///
+    /// Posicao fixa nao serve: a tela gira, e a largura em paisagem nao e a
+    /// mesma de um aparelho pro outro. Cada peca sai de uma conta sobre a
+    /// largura de AGORA.
+    fn posicionar_cabecalho(&self) {
+        let Some(tabela) = self.tableView() else {
+            return;
+        };
+        let largura = tabela.bounds().size.width;
+        if largura < 2.0 {
+            return;
+        }
+
+        let borda = 24.0;
+        let util = largura - borda * 2.0;
+
+        let topo = 18.0;
+        let alto_frase = 44.0;
+        let vao = 16.0;
+        let alto_botao = 48.0;
+        let rodape = 20.0;
+        let altura = topo + alto_frase + vao + alto_botao + rodape;
+
+        if let Some((marca, frase, abrir, colar)) = self.ivars().pecas.borrow().as_ref() {
+            let largo_marca = 46.0;
+            marca.setFrame(CGRect::new(
+                CGPoint::new(borda, topo),
+                CGSize::new(largo_marca, alto_frase),
+            ));
+            frase.setFrame(CGRect::new(
+                CGPoint::new(borda + largo_marca + 12.0, topo),
+                CGSize::new(util - largo_marca - 12.0, alto_frase),
+            ));
+
+            let largo_botao = (util - 14.0) / 2.0;
+            let y_botao = topo + alto_frase + vao;
+            abrir.setFrame(CGRect::new(
+                CGPoint::new(borda, y_botao),
+                CGSize::new(largo_botao, alto_botao),
+            ));
+            colar.setFrame(CGRect::new(
+                CGPoint::new(borda + largo_botao + 14.0, y_botao),
+                CGSize::new(largo_botao, alto_botao),
+            ));
+        }
+
+        // O TABLEHEADERVIEW SO ACEITA ALTURA NOVA SE FOR REATRIBUIDO.
+        //
+        // Mudar o frame dele sozinho nao move a lista uma linha: a tabela
+        // guardou a altura antiga. Atribuir de novo e o que faz ela medir.
+        if let Some(cabecalho) = self.ivars().cabecalho.borrow().as_ref() {
+            cabecalho.setFrame(CGRect::new(CGPoint::ZERO, CGSize::new(largura, altura)));
+            unsafe {
+                let _: () = msg_send![&*tabela, setTableHeaderView: &**cabecalho];
+            }
+        }
+    }
+
     /// A BARRA DE BAIXO: ENDERECO E LICENCAS.
     ///
     /// Embaixo, e nao em cima, porque a barra de cima ja vem montada pelo
@@ -488,9 +651,19 @@ impl LibraryController {
         // principal de um aplicativo de jogador, e as medicoes que ele servia
         // pra ler sairam do aplicativo. Pra trazer de volta basta uma linha:
         // o metodo mostrarRegistro: continua aqui embaixo.
-        let endereco = botao("Colar endereço", sel!(abrirEndereco:));
+        // SO AS LICENCAS AQUI EMBAIXO.
+        //
+        // "Colar endereço" subiu pro cabecalho, junto com "Abrir arquivo", e
+        // virou botao escrito por extenso. O que sobra nesta barra e o aviso
+        // que a licenca MIT obriga: coisa que ninguem procura e que nao pode
+        // sumir.
+        //
+        // E o rodape de texto saiu de vez. No iOS 26 esta barra FLUTUA sobre
+        // o conteudo, entao qualquer texto no fim da tabela passava por tras
+        // das pilulas. Foi o que a foto do simulador mostrou depois do
+        // primeiro conserto: eu tinha trocado uma sobreposicao por outra.
         let licencas = botao("Licenças", sel!(mostrarLicencas:));
-        let itens = NSArray::from_retained_slice(&[endereco, espaco(), licencas]);
+        let itens = NSArray::from_retained_slice(&[espaco(), licencas]);
 
         unsafe {
             let _: () = msg_send![self, setToolbarItems: &*itens, animated: false];
@@ -643,7 +816,9 @@ impl LibraryController {
     }
 
     fn setup_logo(&self) {
-        let view = self.logo_view();
+        let Some(view) = self.logo_view() else {
+            return;
+        };
         // SEM LOGO, SEM DRAMA.
         //
         // A animacao que vinha aqui e a marca do Ruffle, e marca a licenca nao
@@ -694,19 +869,28 @@ impl LibraryController {
     fn view_is_appearing(&self, _animated: bool) {
         tracing::info!("library viewIsAppearing:");
 
-        self.logo_view().start();
+        // A largura so e real a partir daqui, e muda quando a tela gira.
+        self.posicionar_cabecalho();
+
+        if let Some(view) = self.logo_view() {
+            view.start();
+        }
     }
 
     fn view_will_disappear(&self, _animated: bool) {
         tracing::info!("library viewWillDisappear:");
 
-        self.logo_view().stop();
+        if let Some(view) = self.logo_view() {
+            view.stop();
+        }
     }
 
     fn view_did_disappear(&self, _animated: bool) {
         tracing::info!("library viewDidDisappear:");
 
-        self.logo_view().player_lock().flush_shared_objects();
+        if let Some(view) = self.logo_view() {
+            view.player_lock().flush_shared_objects();
+        }
     }
 
     #[allow(deprecated)]
