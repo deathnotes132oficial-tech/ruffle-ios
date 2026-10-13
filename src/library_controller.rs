@@ -235,14 +235,24 @@ define_class!(
             _table_view: &UITableView,
             section: NSInteger,
         ) -> NSInteger {
-            let sections = unsafe { self.ivars().fetched_movies.sections().unwrap() };
+            // Sem secao ainda e uma resposta legitima: a tabela pergunta
+            // antes da busca terminar, e zero e a verdade nesse instante.
+            let Some(sections) = (unsafe { self.ivars().fetched_movies.sections() }) else {
+                return 0;
+            };
+            if section as usize >= sections.count() {
+                return 0;
+            }
             let section_info = sections.objectAtIndex(section as usize);
             unsafe { section_info.numberOfObjects() as isize }
         }
 
         #[unsafe(method(numberOfSectionsInTableView:))]
         fn numberOfSectionsInTableView(&self, _table_view: &UITableView) -> NSInteger {
-            unsafe { self.ivars().fetched_movies.sections().unwrap().count() as NSInteger }
+            match unsafe { self.ivars().fetched_movies.sections() } {
+                Some(s) => s.count() as NSInteger,
+                None => 0,
+            }
         }
 
         #[unsafe(method_id(tableView:cellForRowAtIndexPath:))]
@@ -381,7 +391,6 @@ impl LibraryController {
     fn view_did_load(&self) {
         tracing::info!("library viewDidLoad");
 
-        self.montar_cabecalho();
         self.montar_barra_de_baixo();
         self.garantir_exemplo();
         self.setup_logo();
@@ -392,6 +401,18 @@ impl LibraryController {
                 .performFetch()
                 .expect("failed fetching movies")
         };
+
+        // O CABECALHO SO DEPOIS DA BUSCA, E ISSO DERRUBOU O APLICATIVO.
+        //
+        // Montar o cabecalho obriga a tabela a se medir na hora, e medir-se
+        // e perguntar a fonte de dados quantas secoes existem. Com a chamada
+        // la em cima, a pergunta chegava ANTES do performFetch: o
+        // fetched_movies ainda nao tinha secao nenhuma, o sections() devolvia
+        // None, e o unwrap derrubava tudo no arranque.
+        //
+        // A foto do simulador mostrou a tela inicial do iPhone no lugar do
+        // aplicativo, e o registro trouxe a linha exata.
+        self.montar_cabecalho();
     }
 
     /// UM ARQUIVO DE EXEMPLO, PRA BIBLIOTECA NUNCA NASCER VAZIA.
