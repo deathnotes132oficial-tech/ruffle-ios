@@ -33,6 +33,7 @@ on:
         options:
           - iPhone
           - iPad
+          - iPad13
 
 jobs:
   simulador:
@@ -111,6 +112,9 @@ jobs:
           [ -z "$ESCOLHA" ] && ESCOLHA="iPhone"
           # O revisor da Apple usou um iPad Air 11-inch (M3). Quando a
           # escolha for iPad, pega exatamente esse aparelho.
+          # O iPad de 13 polegadas existe por causa da App Store Connect, que so
+          # aceita captura de tela de iPad nesse tamanho (2064 x 2752).
+          if [ "$ESCOLHA" = "iPad13" ]; then ESCOLHA="iPad Pro 13-inch (M5)"; fi
           if [ "$ESCOLHA" = "iPad" ]; then ESCOLHA="iPad Air 11-inch (M3)"; fi
           # export de verdade: o python3 esta do outro lado do pipe, e um
           # prefixo VAR=... so vale pro comando da esquerda.
