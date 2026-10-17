@@ -198,8 +198,19 @@ jobs:
       # janelinha no meio da tela do iPad, no modo de compatibilidade — foi
       # isso que o revisor chamou de interface apertada.
       #
-      # TELA CHEIA (UIRequiresFullScreen=YES): aplicativo de iPad que nao pede
-      # tela cheia precisa aceitar as quatro orientacoes, e este e de paisagem.
+      # AS QUATRO ORIENTACOES NO IPAD. O iPadOS 26 nao obriga ninguem a
+      # girar: o aplicativo vira uma janela, e declarando so paisagem ele
+      # ficava numa faixa no meio da tela com preto em cima e embaixo,
+      # usando menos da metade do iPad. Foi isso que o revisor viu.
+      #
+      # O JOGO continua deitado — quem trava e o proprio PlayerController,
+      # em supportedInterfaceOrientations. Quem passa a girar e a tela de
+      # abertura, que e uma lista e preenche o iPad em qualquer posicao.
+      #
+      # No iPhone nada muda: la continua so paisagem.
+      #
+      # TELA CHEIA (UIRequiresFullScreen=YES): mantido pra o aplicativo nao
+      # cair em janela dividida, onde a largura vira qualquer coisa.
       #
       # MODO ESCURO SEMPRE (UIUserInterfaceStyle=Dark): as cores do aplicativo
       # sao fixas — o mesmo azul no claro e no escuro — mas os textos das
@@ -230,7 +241,7 @@ jobs:
             ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon \
             INFOPLIST_KEY_CFBundleIconName=AppIcon \
             INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
-            INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
+            INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad="UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
             INFOPLIST_KEY_UIUserInterfaceStyle=Dark \
             INFOPLIST_KEY_ITSAppUsesNonExemptEncryption=NO \
             archive
