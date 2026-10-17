@@ -108,10 +108,18 @@ jobs:
           set -e
           ESCOLHA="${{ inputs.aparelho }}"
           [ -z "$ESCOLHA" ] && ESCOLHA="iPhone"
+          # O revisor da Apple usou um iPad Air 11-inch (M3). Quando a
+          # escolha for iPad, pega exatamente esse aparelho.
+          if [ "$ESCOLHA" = "iPad" ]; then ESCOLHA="iPad Air 11-inch (M3)"; fi
+          # export de verdade: o python3 esta do outro lado do pipe, e um
+          # prefixo VAR=... so vale pro comando da esquerda.
+          export ESCOLHA
           echo "--- aparelhos prontos nesta maquina:"
           xcrun simctl list devices available | grep -i "$ESCOLHA" || true
-          ID=$(ESCOLHA="$ESCOLHA" xcrun simctl list devices available -j | python3 -c "import json,os,sys; d=json.load(sys.stdin)['devices']; e=os.environ['ESCOLHA']; c=[x for v in d.values() for x in v if e in x['name']]; print(c[-1]['udid'] if c else '')")
-          NOME=$(ESCOLHA="$ESCOLHA" xcrun simctl list devices available -j | python3 -c "import json,os,sys; d=json.load(sys.stdin)['devices']; e=os.environ['ESCOLHA']; c=[x for v in d.values() for x in v if e in x['name']]; print(c[-1]['name'] if c else '')")
+          xcrun simctl list devices available -j > /tmp/aparelhos.json
+          ESCOLHER='import json,os,sys; d=json.load(open("/tmp/aparelhos.json"))["devices"]; e=os.environ["ESCOLHA"]; c=[x for v in d.values() for x in v if e in x["name"]]; print(c[-1][sys.argv[1]] if c else "")'
+          ID=$(python3 -c "$ESCOLHER" udid)
+          NOME=$(python3 -c "$ESCOLHER" name)
           if [ -z "$ID" ]; then
             echo "Nenhum $ESCOLHA pronto. Nao da pra seguir."
             exit 1
