@@ -12,11 +12,12 @@ use objc2::runtime::AnyObject;
 use objc2::{define_class, msg_send, sel, DefinedClass as _, MainThreadOnly, Message};
 use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_foundation::{
-    MainThreadMarker, NSBundle, NSCoder, NSObjectProtocol, NSRunLoop, NSString, NSUserDefaults,
+    MainThreadMarker, NSBundle, NSCoder, NSObjectProtocol, NSRunLoop, NSSet, NSString,
+    NSUserDefaults,
 };
 use objc2_ui_kit::{
     UIButton, UIButtonType, UIColor, UIControlEvents, UIControlState,
-    UIGestureRecognizerState, UIInterfaceOrientationMask, UILabel,
+    UIGestureRecognizerState, UIInterfaceOrientationMask, UILabel, UIPress, UIPressesEvent,
     UILongPressGestureRecognizer, UINavigationController, UIPanGestureRecognizer,
     UITapGestureRecognizer, UIView, UIViewController,
 };
@@ -369,11 +370,55 @@ define_class!(
             true
         }
 
+        // NAO REPASSAR PRA TELA. ERA DAQUI QUE SAIA O TECLADO SOZINHO.
+        //
+        // O iOS promove este controlador a primeiro respondente sozinho,
+        // assim que a tela aparece, porque canBecomeFirstResponder diz que
+        // sim. Repassando pra PlayerView — que e UIKeyInput — o sistema
+        // entendia que havia um campo de texto ativo e subia o teclado na
+        // hora, com o jogo ainda carregando e ninguem tendo pedido nada.
+        //
+        // No iPhone passou despercebido; no iPad o teclado toma metade da
+        // tela, e foi assim que o revisor da Apple viu o aplicativo.
+        //
+        // Quem promove a PlayerView agora e so o laco do teclado, em
+        // player_view.rs, quando o jogo de fato pede. As teclas de teclado
+        // fisico continuam chegando: elas descem por pressesBegan e irmaos,
+        // logo abaixo.
         #[unsafe(method(becomeFirstResponder))]
         fn becomeFirstResponder(&self) -> bool {
             tracing::info!("player controller becomeFirstResponder");
-            self.view().becomeFirstResponder();
-            true
+            unsafe { msg_send![super(self), becomeFirstResponder] }
+        }
+
+        // AS TECLAS FISICAS, ENTREGUES A TELA.
+        //
+        // Enquanto a PlayerView era primeiro respondente, elas chegavam
+        // nela direto. Agora quem fica na cadeia e este controlador, entao
+        // ele passa adiante. Sem isto, teclado fisico ligado no iPad
+        // deixaria de mover o personagem — e ninguem veria erro nenhum.
+        #[unsafe(method(pressesBegan:withEvent:))]
+        fn pressesBegan_withEvent(&self, presses: &NSSet<UIPress>, event: Option<&UIPressesEvent>) {
+            let tela = self.view();
+            let _: () = unsafe { msg_send![&*tela, pressesBegan: presses, withEvent: event] };
+        }
+
+        #[unsafe(method(pressesChanged:withEvent:))]
+        fn pressesChanged_withEvent(&self, presses: &NSSet<UIPress>, event: Option<&UIPressesEvent>) {
+            let tela = self.view();
+            let _: () = unsafe { msg_send![&*tela, pressesChanged: presses, withEvent: event] };
+        }
+
+        #[unsafe(method(pressesEnded:withEvent:))]
+        fn pressesEnded_withEvent(&self, presses: &NSSet<UIPress>, event: Option<&UIPressesEvent>) {
+            let tela = self.view();
+            let _: () = unsafe { msg_send![&*tela, pressesEnded: presses, withEvent: event] };
+        }
+
+        #[unsafe(method(pressesCancelled:withEvent:))]
+        fn pressesCancelled_withEvent(&self, presses: &NSSet<UIPress>, event: Option<&UIPressesEvent>) {
+            let tela = self.view();
+            let _: () = unsafe { msg_send![&*tela, pressesCancelled: presses, withEvent: event] };
         }
 
         #[unsafe(method(canResignFirstResponder))]
@@ -384,7 +429,7 @@ define_class!(
         #[unsafe(method(resignFirstResponder))]
         fn resignFirstResponder(&self) -> bool {
             tracing::info!("controller resignFirstResponder");
-            true
+            unsafe { msg_send![super(self), resignFirstResponder] }
         }
     }
 );
