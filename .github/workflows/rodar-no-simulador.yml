@@ -25,6 +25,14 @@ on:
         description: "Endereco do jogo (em branco = abre na tela de entrada, que e o teste normal)"
         required: false
         default: ""
+      aparelho:
+        description: "Em qual aparelho rodar"
+        required: false
+        default: "iPhone"
+        type: choice
+        options:
+          - iPhone
+          - iPad
 
 jobs:
   simulador:
@@ -89,16 +97,23 @@ jobs:
       # Criar escolhendo "o ultimo da lista" saiu um iPhone 6s Plus, que nao
       # roda iOS 26 — "Incompatible device". Os que ja vem na maquina sao
       # compativeis com o Xcode dela.
-      - name: Ligar um iPhone simulado
+      # QUAL APARELHO — e por que isto passou a importar.
+      #
+      # A Apple revisou as tres vezes num iPad, mesmo o aplicativo sendo so de
+      # iPhone, e cobrou que funcionasse la. Testar so no iPhone era olhar pra
+      # um aparelho que o revisor nunca usou.
+      - name: Ligar o aparelho simulado
         id: telefone
         run: |
           set -e
+          ESCOLHA="${{ inputs.aparelho }}"
+          [ -z "$ESCOLHA" ] && ESCOLHA="iPhone"
           echo "--- aparelhos prontos nesta maquina:"
-          xcrun simctl list devices available | grep -i iphone || true
-          ID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for v in d.values() for x in v if 'iPhone' in x['name']]; print(c[-1]['udid'] if c else '')")
-          NOME=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for v in d.values() for x in v if 'iPhone' in x['name']]; print(c[-1]['name'] if c else '')")
+          xcrun simctl list devices available | grep -i "$ESCOLHA" || true
+          ID=$(ESCOLHA="$ESCOLHA" xcrun simctl list devices available -j | python3 -c "import json,os,sys; d=json.load(sys.stdin)['devices']; e=os.environ['ESCOLHA']; c=[x for v in d.values() for x in v if e in x['name']]; print(c[-1]['udid'] if c else '')")
+          NOME=$(ESCOLHA="$ESCOLHA" xcrun simctl list devices available -j | python3 -c "import json,os,sys; d=json.load(sys.stdin)['devices']; e=os.environ['ESCOLHA']; c=[x for v in d.values() for x in v if e in x['name']]; print(c[-1]['name'] if c else '')")
           if [ -z "$ID" ]; then
-            echo "Nenhum iPhone pronto. Nao da pra seguir."
+            echo "Nenhum $ESCOLHA pronto. Nao da pra seguir."
             exit 1
           fi
           echo "usando: $NOME ($ID)"
