@@ -489,16 +489,27 @@ impl PlayerController {
         // a primeira recusa, e e exatamente a frase que ela usou: interface
         // apertada, com controles dificeis de usar por tamanho e posicao.
         //
-        // O criterio agora e a origem do conteudo. Um `.swf` do proprio
-        // aparelho e um arquivo que alguem abriu pra ver: comeca limpo, so com
-        // o olho, e quem quiser os controles toca nele. Conteudo que veio da
-        // INTERNET — que e por onde o jogador entra, pelo link do site — abre
-        // com tudo na tela, igual a hoje.
+        // O CRITERIO ERA A ORIGEM, E ESTAVA ERRADO.
         //
-        // Assim nenhum jogador perde nada e a tela que o revisor abre nao tem
-        // nada por cima.
-        let do_aparelho = movie_url.scheme() == "file";
-        self.ivars().modo_olho.set(if do_aparelho { 1 } else { 0 });
+        // Era "veio da internet entao mostra tudo". So que COLAR UM ENDERECO
+        // tambem vem da internet — e foi exatamente o que o revisor fez, em
+        // 17/10, porque eu escrevi na resposta a Apple pra ele colar o
+        // endereco. Ele caiu no caminho que liga os treze botoes por cima do
+        // conteudo, e a recusa por interface apertada voltou.
+        //
+        // O criterio certo e mais estreito: o jogador entra pelo botao do
+        // SITE, que abre `deathnote://jogar?u=<endereco>` — um esquema que so
+        // o nosso app atende e que endereco colado nunca tem. Ver
+        // `scene_delegate::tocar_endereco_no_nav`, que marca a origem logo
+        // antes de criar este tocador.
+        //
+        // Entao: veio pelo botao do site -> tudo na tela, como o jogador
+        // precisa. Qualquer outro caminho (endereco colado, arquivo do
+        // aparelho, argumento de teste) -> comeca limpo, so com o olho.
+        let _ = &movie_url;
+        self.ivars()
+            .modo_olho
+            .set(if crate::scene_delegate::veio_pelo_site() { 0 } else { 1 });
         let navigator = ExternalNavigatorBackend::new(
             player_options
                 .base

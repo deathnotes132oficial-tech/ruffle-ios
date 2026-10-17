@@ -333,6 +333,8 @@ pub(crate) fn tocar_endereco_no_nav(
 ) -> Option<()> {
     let endereco = Url::parse(texto).ok()?;
 
+    let veio_de_esquema_proprio = endereco.scheme() == "deathnote";
+
     let alvo = match endereco.scheme() {
         "deathnote" => {
             // O endereco de verdade vem dentro do parametro "u".
@@ -372,6 +374,14 @@ pub(crate) fn tocar_endereco_no_nav(
     // DirectFile nao aceita um endereco cru: ele quer um ContentDescriptor,
     // que e o endereco mais o que o Ruffle precisa saber sobre ele. Pra coisa
     // que mora na internet, a propria biblioteca oferece o new_remote.
+    // MARCA A ORIGEM, pra tela do tocador saber se mostra os controles.
+    //
+    // Aqui chegam duas coisas que ficam identicas depois de abertas: o botao
+    // do site (`deathnote://`) e um endereco que alguem colou (`http://`). O
+    // tocador so enxerga o endereco de DENTRO, que nos dois casos e http — por
+    // isso a marca e posta agora, enquanto ainda da pra distinguir.
+    marcar_origem(veio_de_esquema_proprio);
+
     let controller = PlayerController::new(
         mtm,
         PlayingContent::DirectFile(ContentDescriptor::new_remote(alvo)),
@@ -396,4 +406,29 @@ fn play_url(scene: &UIScene, url: &NSURL) -> Option<()> {
     nav.pushViewController_animated(&player_controller, true);
 
     Some(())
+}
+
+/// DE ONDE VEIO O CONTEUDO QUE ESTA ABRINDO AGORA.
+///
+/// Vale `true` so quando o jogador entrou pelo botao do site, que usa o
+/// esquema `deathnote://`. Endereco colado nunca tem esse esquema, e foi por
+/// ai que o revisor da Apple entrou em 17/10 — vendo os treze botoes do jogo
+/// por cima do conteudo, o que rendeu a recusa por interface apertada.
+///
+/// Mora aqui, e nao num parametro do tocador, porque mudar a assinatura dele
+/// obrigaria a mexer em todos os caminhos que abrem um tocador, inclusive os
+/// que nao tem origem nenhuma pra informar.
+///
+/// E CONSUMIDA NA LEITURA: quem le, zera. Sem isso, um arquivo aberto logo
+/// depois de uma partida herdaria a marca dela e abriria com tudo na tela.
+pub(crate) fn marcar_origem(pelo_site: bool) {
+    VEIO_PELO_SITE.with(|c| c.set(pelo_site));
+}
+
+pub(crate) fn veio_pelo_site() -> bool {
+    VEIO_PELO_SITE.with(|c| c.replace(false))
+}
+
+thread_local! {
+    static VEIO_PELO_SITE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
