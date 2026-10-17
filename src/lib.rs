@@ -10,6 +10,7 @@ mod add_controller;
 mod app_delegate;
 mod edit_controller;
 mod library_controller;
+mod navegacao;
 mod player_controller;
 mod player_view;
 mod registro;
@@ -60,6 +61,7 @@ pub fn launch(app_class: Option<&AnyClass>, delegate_class: Option<&AnyClass>) {
     let _ = player_view::PlayerView::class();
     let _ = player_controller::PlayerController::class();
     let _ = library_controller::LibraryController::class();
+    let _ = navegacao::NavegacaoPrincipal::class();
     let _ = edit_controller::EditController::class();
     let _ = add_controller::AddController::class();
 

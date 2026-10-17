@@ -2,6 +2,9 @@
 
 #import <UIKit/UIKit.h>
 
+@interface NavegacaoPrincipal : UINavigationController
+@end
+
 @interface PlayerView: UIView
 @end
 
