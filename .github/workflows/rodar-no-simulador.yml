@@ -90,6 +90,7 @@ jobs:
             INFOPLIST_KEY_CFBundleDisplayName="CF Client" \
             INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
             INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
+            INFOPLIST_KEY_UIRequiresFullScreen=YES \
             build
 
       # USAR UM IPHONE QUE JA EXISTE, em vez de criar.

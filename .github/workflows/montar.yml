@@ -193,9 +193,13 @@ jobs:
       # IPHONEOS_DEPLOYMENT_TARGET=15.0: o projeto pede iOS 13, e a Apple
       # avisa no envio que a partir de 2027 o minimo sera 15. Hoje e so
       # aviso; subir agora evita ter que voltar aqui depois.
-      # SO IPHONE (TARGETED_DEVICE_FAMILY=1): o projeto vem marcado tambem pra
-      # iPad e visor, e app de iPad que aceita uma orientacao so e recusado na
-      # conferencia da Apple.
+      # IPHONE E IPAD (TARGETED_DEVICE_FAMILY=1,2): a Apple revisou as tres
+      # vezes num iPad. Marcado so como iPhone, o aplicativo abria numa
+      # janelinha no meio da tela do iPad, no modo de compatibilidade — foi
+      # isso que o revisor chamou de interface apertada.
+      #
+      # TELA CHEIA (UIRequiresFullScreen=YES): aplicativo de iPad que nao pede
+      # tela cheia precisa aceitar as quatro orientacoes, e este e de paisagem.
       #
       # MODO ESCURO SEMPRE (UIUserInterfaceStyle=Dark): as cores do aplicativo
       # sao fixas — o mesmo azul no claro e no escuro — mas os textos das
@@ -220,7 +224,8 @@ jobs:
             MARKETING_VERSION=1.0 \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             IPHONEOS_DEPLOYMENT_TARGET=15.0 \
-            TARGETED_DEVICE_FAMILY=1 \
+            TARGETED_DEVICE_FAMILY="1,2" \
+            INFOPLIST_KEY_UIRequiresFullScreen=YES \
             INFOPLIST_KEY_CFBundleDisplayName="CF Client" \
             ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon \
             INFOPLIST_KEY_CFBundleIconName=AppIcon \
