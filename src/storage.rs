@@ -356,9 +356,28 @@ pub fn get_playing_content(url: &NSURL) -> PlayingContent {
         });
     }
 
-    // Ensure we are authorized to read the bundle contents.
-    let _access = SecurityScopedResource::access(url)
-        .unwrap_or_else(|| panic!("failed accessing NSURL: {url:?}"));
+    // FALTA DE ESCOPO DE SEGURANCA NAO E ERRO FATAL.
+    //
+    // O QUE ESTAVA AQUI
+    // -----------------
+    //     let _access = SecurityScopedResource::access(url)
+    //         .unwrap_or_else(|| panic!("failed accessing NSURL: {url:?}"));
+    //
+    // O startAccessingSecurityScopedResource so devolve verdadeiro para
+    // endereco que VEIO do seletor de arquivos do sistema. Para um arquivo
+    // que o proprio aplicativo escreveu na pasta dele — o Exemplo.swf — ele
+    // devolve FALSO, porque nao ha escopo nenhum a abrir: o arquivo ja e
+    // nosso e sempre foi legivel.
+    //
+    // Com o panic!, portanto, o aplicativo se derrubava justamente no
+    // caminho que SO acontece na PRIMEIRA abertura depois de instalado (o
+    // garantir_exemplo chama aqui uma vez; depois o arquivo ja existe e ele
+    // nem entra). Quem instala e abre uma vez — um revisor da App Store —
+    // via o aplicativo sumir; quem abria de novo via tudo funcionar.
+    //
+    // Sem escopo, segue em frente. Se o arquivo realmente nao puder ser
+    // lido, quem reclama e a leitura, com erro tratado.
+    let _access = SecurityScopedResource::access(url);
 
     match Bundle::from_path(url_to_path(&url)) {
         Ok(bundle) => {
@@ -408,12 +427,14 @@ pub fn get_playing_content(url: &NSURL) -> PlayingContent {
 
 /// The returned movie should only be relied upon in `scene_delegate::play_url`.
 pub fn movie_from_url(url: &NSURL) -> Option<Retained<Movie>> {
-    // The canonical URL in our DB is a file reference URL.
+    // Mesmo motivo do add_movie: endereco por referencia pode vir vazio, e
+    // isso nao pode derrubar o aplicativo. Esta funcao e a PRIMEIRA chamada
+    // com o Exemplo.swf recem-criado, entao o unwrap daqui caia antes de
+    // todos os outros.
     let file_url = url.fileReferenceURL();
-    let url = if url.isFileURL() {
-        file_url.as_deref().unwrap()
-    } else {
-        url
+    let url = match (url.isFileURL(), file_url.as_deref()) {
+        (true, Some(referencia)) => referencia,
+        _ => url,
     };
 
     let request: Retained<NSFetchRequest> = unsafe { msg_send![Movie::class(), fetchRequest] };
@@ -434,13 +455,35 @@ pub fn movie_from_url(url: &NSURL) -> Option<Retained<Movie>> {
     None
 }
 
+/// NAO DERRUBAR O APLICATIVO POR CAUSA DE UM ENDERECO.
+///
+/// O QUE ESTAVA AQUI
+/// -----------------
+///     let url = if url.isFileURL() { file_url.as_deref().unwrap() } else { url };
+///
+/// O fileReferenceURL devolve vazio quando o arquivo nao existe mais, quando
+/// esta num lugar que nao aceita esse tipo de endereco, ou simplesmente
+/// quando o sistema decide nao dar — e no iOS ele e uma forma antiga, que a
+/// Apple desencoraja. Nesses casos o unwrap derruba o programa INTEIRO.
+///
+/// POR QUE ISSO IMPORTA MAIS DO QUE PARECE
+/// --------------------------------------
+/// Esta funcao e chamada quando a biblioteca ganha um arquivo. Na PRIMEIRA
+/// abertura depois de instalado, o aplicativo cria o Exemplo.swf e chama
+/// aqui; da segunda em diante ele ve que o arquivo ja existe e nem entra.
+/// Ou seja: se cair aqui, cai so na primeira vez que a pessoa abre — que e
+/// exatamente o que um revisor da App Store faz, uma vez, e desiste.
+///
+/// Guardar o endereco comum em vez de derrubar nao perde nada: ele continua
+/// apontando pro mesmo arquivo. O endereco por referencia e preferido so
+/// porque sobrevive ao arquivo ser renomeado; sem ele, o pior caso e a
+/// entrada parar de achar o arquivo se alguem renomear por fora.
 pub fn add_movie(url: &NSURL) {
     // The canonical URL in our DB is a file reference URL.
     let file_url = url.fileReferenceURL();
-    let url = if url.isFileURL() {
-        file_url.as_deref().unwrap()
-    } else {
-        url
+    let url = match (url.isFileURL(), file_url.as_deref()) {
+        (true, Some(referencia)) => referencia,
+        _ => url,
     };
 
     let content = get_playing_content(url);

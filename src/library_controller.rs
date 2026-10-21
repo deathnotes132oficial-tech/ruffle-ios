@@ -427,6 +427,27 @@ impl LibraryController {
     ///
     /// Vale so na primeira vez. Se o jogador apagar da lista, nao volta.
     fn garantir_exemplo(&self) {
+        // CERCA DE SEGURANCA: NADA AQUI DENTRO PODE DERRUBAR O APLICATIVO.
+        //
+        // Isto aqui e uma gentileza — uma amostra pra lista nao nascer vazia.
+        // Gentileza que fecha o aplicativo e pior que gentileza nenhuma, e
+        // foi o que aconteceu: um panic! la no fundo do caminho (no acesso
+        // com escopo de seguranca) matava o programa, e so na PRIMEIRA
+        // abertura, porque depois esta funcao nem roda.
+        //
+        // Os pontos conhecidos ja foram consertados um a um. Esta cerca
+        // existe pros que ninguem viu ainda: se algo aqui dentro estourar, o
+        // aplicativo perde a amostra e segue de pe.
+        let resultado = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            Self::criar_exemplo();
+        }));
+        if resultado.is_err() {
+            tracing::error!("nao deu pra criar o exemplo; seguindo sem ele");
+        }
+    }
+
+    /// O trabalho em si. Chamado so pelo garantir_exemplo, dentro da cerca.
+    fn criar_exemplo() {
         let Some(asset) = NSDataAsset::initWithName(NSDataAsset::alloc(), ns_string!("logo-anim"))
         else {
             return;
