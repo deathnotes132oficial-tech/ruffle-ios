@@ -448,7 +448,15 @@ impl LibraryController {
 
     /// O trabalho em si. Chamado so pelo garantir_exemplo, dentro da cerca.
     fn criar_exemplo() {
-        let Some(asset) = NSDataAsset::initWithName(NSDataAsset::alloc(), ns_string!("logo-anim"))
+        // RECURSO PROPRIO, SEPARADO DA MARCA DO CABECALHO.
+        //
+        // Antes a amostra era a mesma animacao do cabecalho: um palco de
+        // 1000x600 quase todo vazio com o logotipo pequeno passeando. Ela
+        // TOCAVA — as fotos do simulador provam — mas na tela lia como tela
+        // vazia, e foi o que a Apple chamou de "the sample file did not
+        // appear". O cabecalho continua com a marca; a amostra passou a ser
+        // uma animacao que ocupa o palco inteiro.
+        let Some(asset) = NSDataAsset::initWithName(NSDataAsset::alloc(), ns_string!("exemplo-anim"))
         else {
             return;
         };

@@ -1,0 +1,13 @@
+{
+  "data" : [
+    {
+      "filename" : "exemplo-anim.swf",
+      "idiom" : "universal",
+      "universal-type-identifier" : "com.adobe.shockwave-flash"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
