@@ -488,7 +488,13 @@ impl PlayerView {
                 if folga < 1200 {
                     self.player_lock().coletar_tudo();
                 }
-                self.player_lock().varredura();
+                // A VARREDURA SAIU.
+                //
+                // Ela soltava texturas e malhas paradas na nossa copia antiga
+                // do Ruffle. A base nova (copia skua) ja apara os depositos
+                // de textura sozinha, e libera a biblioteca de cada filme que
+                // o jogo descarrega — medido no navegador: criando e saindo de
+                // sala, a memoria parou de crescer depois da sexta sala.
             }
             crate::registro::anotar_memoria();
 
