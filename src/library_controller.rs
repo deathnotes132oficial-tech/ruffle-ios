@@ -20,7 +20,7 @@ use objc2_ui_kit::{
 };
 #[allow(deprecated)]
 use objc2_ui_kit::{UIDocumentPickerMode, UIStoryboardSegue};
-use ruffle_core::tag_utils::SwfMovie;
+use ruffle_core::tag_utils::SwfMovieData;
 use ruffle_core::PlayerBuilder;
 use ruffle_frontend_utils::backends::audio::CpalAudioBackend;
 
@@ -819,7 +819,7 @@ impl LibraryController {
             return;
         };
         let data = unsafe { asset.data() };
-        // SAFETY: SwfMovie::from_data won't modify the NSData.
+        // SAFETY: SwfMovieData::from_data won't modify the NSData.
         let bytes = unsafe { data.as_bytes_unchecked() };
         // O QUARTO ARGUMENTO E NOVO no Ruffle.
         //
@@ -830,7 +830,9 @@ impl LibraryController {
         // Enfeite nao derruba aplicativo: se o arquivo vier torto, a tela abre
         // sem ele. Um panic aqui mataria o app no arranque por causa de um
         // desenho de cabecalho.
-        let Ok(movie) = SwfMovie::from_data(bytes, "file://logo-anim.swf".into(), None, None)
+        // SwfMovieData, e nao SwfMovie: na base nova o SwfMovie mora dentro
+        // do coletor (ruffle#24850), e o PlayerBuilder recebe os dados crus.
+        let Ok(movie) = SwfMovieData::from_data(bytes, "file://logo-anim.swf".into(), None, None)
         else {
             tracing::warn!("a animacao de abertura nao pode ser lida; seguindo sem ela");
             return;
