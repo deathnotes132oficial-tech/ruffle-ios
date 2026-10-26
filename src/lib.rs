@@ -14,6 +14,7 @@ mod navegacao;
 mod player_controller;
 mod player_view;
 mod registro;
+mod roteiro;
 mod scene_delegate;
 mod teclado;
 mod storage;
