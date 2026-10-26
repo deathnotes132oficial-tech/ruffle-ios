@@ -40,6 +40,20 @@ FECHA_DICAS = (945, 362)     # X do aviso de check-in
 ARENA = (518, 251)           # o predio do Salao Arena, no salao
 X_DA_LISTA = (895, 28, 930, 58)
 
+# O QUE ESTA ABERTO NA TELA, PELA COR DO BOTAO DE FECHAR.
+#
+# A primeira rodada com o jogo de verdade clicava "fechar o anuncio" AS CEGAS.
+# Naquele dia a conta ja tinha visto o anuncio (no teste do navegador), entao
+# ele nao apareceu — e o clique caiu no predio da Capela, que abriu o "Sistema
+# de Auditorio". Logo depois o jogo desconectou. Pode ter sido coincidencia;
+# clicar no escuro nao e. Agora so se fecha o que se ve.
+#
+# Conferido em fotos reais de cada situacao (lista, salao com check-in,
+# desconectado, anuncio, salao limpo, sala): cada detector so acende na sua.
+X_DO_CHECKIN = (930, 348, 962, 378)
+X_DO_ANUNCIO = (792, 144, 826, 178)
+X_DO_DESCONECTADO = (727, 213, 758, 244)
+
 ESPERA = 9
 
 os.makedirs(SAIDA, exist_ok=True)
@@ -95,13 +109,27 @@ def no_palco(img, x, y):
     return (w - 1000 * s) / 2 + x * s, (h - 600 * s) / 2 + y * s
 
 
-def na_lista():
-    img = foto()
-    x0, y0 = no_palco(img, X_DA_LISTA[0], X_DA_LISTA[1])
-    x1, y1 = no_palco(img, X_DA_LISTA[2], X_DA_LISTA[3])
+def vermelho(r, g, b):
+    return r > 150 and g < 70 and b < 70
+
+
+def amarelo(r, g, b):
+    return r > 200 and g > 160 and b < 90
+
+
+def tem(img, caixa, cor, minimo):
+    x0, y0 = no_palco(img, caixa[0], caixa[1])
+    x1, y1 = no_palco(img, caixa[2], caixa[3])
     px = list(img.crop((int(x0), int(y0), int(x1), int(y1))).getdata())
-    vermelho = sum(1 for r, g, b in px if r > 150 and g < 70 and b < 70)
-    return 100 * vermelho / max(1, len(px)) >= 5
+    return 100 * sum(1 for r, g, b in px if cor(r, g, b)) / max(1, len(px)) >= minimo
+
+
+def na_lista(img=None):
+    return tem(img or foto(), X_DA_LISTA, vermelho, 5)
+
+
+def desconectado(img=None):
+    return tem(img or foto(), X_DO_DESCONECTADO, vermelho, 5)
 
 
 def clicar(ponto, prazo=15):
@@ -119,7 +147,9 @@ def clicar(ponto, prazo=15):
 
 
 def parar(motivo, ciclo):
-    foto("parou.png")
+    img = foto("parou.png")
+    if desconectado(img) and "DESCONECT" not in motivo:
+        motivo += " — e o jogo esta DESCONECTADO"
     print("PAROU no ciclo %d: %s (foto: parou.png)" % (ciclo, motivo), flush=True)
     resumir()
     sys.exit(2)
@@ -159,22 +189,31 @@ esperar(120, 0, "carregando")
 foto("0-depois-de-carregar.png")
 
 chegou = False
-for tentativa in range(1, 7):
-    if na_lista():
+for tentativa in range(1, 9):
+    img = foto("chegando-%d.png" % tentativa)
+    if na_lista(img):
         chegou = True
         break
-    print("tentativa %d de chegar na lista de salas" % tentativa, flush=True)
-    clicar(FECHA_ANUNCIO)
-    esperar(3, 0, "chegando")
-    clicar(FECHA_DICAS)
-    esperar(3, 0, "chegando")
+    if desconectado(img):
+        parar("o jogo DESCONECTOU antes de chegar na lista", 0)
+    if tem(img, X_DO_ANUNCIO, amarelo, 10):
+        print("tentativa %d: fechando o anuncio" % tentativa, flush=True)
+        clicar(FECHA_ANUNCIO)
+        esperar(4, 0, "chegando")
+        continue
+    if tem(img, X_DO_CHECKIN, vermelho, 5):
+        print("tentativa %d: fechando o aviso de check-in" % tentativa, flush=True)
+        clicar(FECHA_DICAS)
+        esperar(4, 0, "chegando")
+        continue
+    # Nada aberto: o salao esta limpo, e so agora o predio e clicado.
+    print("tentativa %d: entrando no Salao Arena" % tentativa, flush=True)
     clicar(ARENA)
     for _ in range(6):
         esperar(10, 0, "chegando")
         if na_lista():
             chegou = True
             break
-    foto("chegando-%d.png" % tentativa)
     if chegou:
         break
 if not chegou:
