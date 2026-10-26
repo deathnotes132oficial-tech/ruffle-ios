@@ -500,6 +500,20 @@ impl PlayerView {
 
         }
 
+        // MODO DE TESTE — so com `--roteiro` na abertura. Ver `roteiro.rs`.
+        //
+        // A cada quadro, porque o clique e feito em tres tempos (mover, apertar,
+        // soltar) e cada tempo espera o anterior assentar. A trava do jogador
+        // fica presa so durante o passo.
+        if crate::roteiro::ligado() {
+            if let Some(jogo) = self.ivars().player.get() {
+                let d = self.viewport_dimensions();
+                if let Ok(mut p) = jogo.lock() {
+                    crate::roteiro::passo(&mut p, d.width as f64, d.height as f64);
+                }
+            }
+        }
+
         // O TECLADO, SE O JOGO PEDIU.
         //
         // A comparacao com o estado atual e o que impede de pedir 60 vezes

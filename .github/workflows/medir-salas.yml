@@ -1,0 +1,165 @@
+# Mede a memoria do jogo de verdade, criando e saindo de sala, no simulador.
+#
+# POR QUE EXISTE
+# --------------
+# No navegador do PC, o mesmo gesto mostrou a diferenca entre as duas bases
+# do Ruffle: a antiga crescia ~40 MB por minuto sem parar; a nova parou de
+# crescer depois da sexta sala. Faltava o MESMO gesto no iOS — e o simulador
+# nao tem como tocar na tela. O aplicativo, aberto com --roteiro, obedece a um
+# arquivo de comandos (src/roteiro.rs); este workflow decide os cliques
+# olhando a tela (.github/medir_salas.py).
+#
+# O LINK DO JOGO E SEGREDO, NAO ENTRADA
+# -------------------------------------
+# O repositorio e publico, e entrada de workflow aparece no registro pra
+# qualquer um. O link leva a chave da sessao (key=...), entao ele vem do
+# segredo JOGO_LINK, que o GitHub esconde dos registros. E antes de guardar
+# as fotos e textos, a chave e apagada de tudo que o aplicativo escreveu.
+#
+# UMA MEDICAO POR VEZ: a mesma conta em duas sessoes derruba a primeira.
+
+name: Medir salas no simulador
+
+on:
+  workflow_dispatch:
+    inputs:
+      ciclos:
+        description: "Quantas vezes criar e sair de sala"
+        required: false
+        default: "20"
+      aparelho:
+        description: "Em qual aparelho rodar"
+        required: false
+        default: "iPhone"
+        type: choice
+        options:
+          - iPhone
+          - iPad
+
+concurrency:
+  group: medir-salas
+  cancel-in-progress: false
+
+jobs:
+  medir:
+    runs-on: macos-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Pegar o codigo
+        uses: actions/checkout@v4
+
+      - name: Conferir o segredo
+        env:
+          LINK: ${{ secrets.JOGO_LINK }}
+        run: |
+          if [ -z "$LINK" ]; then
+            echo "Falta o segredo JOGO_LINK (o link do jogo com user= e key=)."
+            exit 1
+          fi
+          echo "segredo presente (${#LINK} caracteres)"
+
+      - name: Instalar o alvo de simulador
+        run: |
+          rustup show
+          rustup target add aarch64-apple-ios-sim
+
+      - name: Descobrir o nome do projeto
+        id: achar
+        run: |
+          set -e
+          PROJETO=$(ls -d *.xcodeproj | head -1)
+          ESQUEMA=$(xcodebuild -list -project "$PROJETO" -json \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['project']['schemes'][0])")
+          echo "projeto=$PROJETO" >> $GITHUB_OUTPUT
+          echo "esquema=$ESQUEMA" >> $GITHUB_OUTPUT
+
+      # Igual ao "Rodar no simulador", de proposito: medir outra compilacao
+      # seria medir outra coisa.
+      - name: Compilar para o simulador
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project "${{ steps.achar.outputs.projeto }}" \
+            -scheme "${{ steps.achar.outputs.esquema }}" \
+            -configuration Release \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath construcao \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            INFOPLIST_KEY_CFBundleDisplayName="CF Client" \
+            INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
+            INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad="UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
+            INFOPLIST_KEY_UIRequiresFullScreen=YES \
+            build
+
+      - name: Ligar o aparelho simulado
+        id: telefone
+        run: |
+          set -e
+          ESCOLHA="${{ inputs.aparelho }}"
+          [ -z "$ESCOLHA" ] && ESCOLHA="iPhone"
+          if [ "$ESCOLHA" = "iPad" ]; then ESCOLHA="iPad Air 11-inch (M3)"; fi
+          export ESCOLHA
+          xcrun simctl list devices available -j > /tmp/aparelhos.json
+          ESCOLHER='import json,os,sys; d=json.load(open("/tmp/aparelhos.json"))["devices"]; e=os.environ["ESCOLHA"]; c=[x for v in d.values() for x in v if e in x["name"]]; print(c[-1][sys.argv[1]] if c else "")'
+          ID=$(python3 -c "$ESCOLHER" udid)
+          NOME=$(python3 -c "$ESCOLHER" name)
+          [ -n "$ID" ] || { echo "Nenhum $ESCOLHA pronto."; exit 1; }
+          echo "usando: $NOME ($ID)"
+          xcrun simctl boot "$ID" || true
+          xcrun simctl bootstatus "$ID" -b
+          echo "id=$ID" >> $GITHUB_OUTPUT
+
+      - name: Instalar o aplicativo
+        id: abrir
+        run: |
+          set -e
+          APLICATIVO=$(find construcao/Build/Products -maxdepth 3 -name '*.app' | head -1)
+          NOME=$(defaults read "$PWD/$APLICATIVO/Info" CFBundleIdentifier)
+          xcrun simctl install "${{ steps.telefone.outputs.id }}" "$APLICATIVO"
+          echo "nome=$NOME" >> $GITHUB_OUTPUT
+          pip3 install --quiet --break-system-packages pillow || pip3 install --quiet pillow
+
+      - name: Abrir o jogo e medir
+        env:
+          LINK: ${{ secrets.JOGO_LINK }}
+          ID: ${{ steps.telefone.outputs.id }}
+          APP: ${{ steps.abrir.outputs.nome }}
+          CICLOS: ${{ inputs.ciclos }}
+          GIRAR: ${{ inputs.aparelho == 'iPad' && '0' || '1' }}
+        run: |
+          mkdir -p fotos
+          # A sonda da base nova (REPARTICAO: ... gc N) e os passos do roteiro
+          # vao pro registro do sistema; isto os guarda durante a medicao.
+          xcrun simctl spawn "$ID" log stream --style compact \
+            --predicate 'eventMessage CONTAINS "REPARTICAO" OR eventMessage CONTAINS "BIBLIOTECA" OR eventMessage CONTAINS "ROTEIRO"' \
+            > fotos/sonda.txt 2>&1 &
+          xcrun simctl launch --console-pty "$ID" "$APP" --jogo "$LINK" --roteiro \
+            > fotos/o-que-o-app-disse.txt 2>&1 &
+          python3 .github/medir_salas.py
+
+      # A chave da sessao sai de tudo antes de qualquer coisa ser guardada.
+      - name: Apagar a chave dos registros
+        id: limpar
+        if: always()
+        env:
+          LINK: ${{ secrets.JOGO_LINK }}
+        run: |
+          CHAVE=$(printf '%s' "$LINK" | sed -nE 's/.*[?&]key=([^&]+).*/\1/p')
+          [ -n "$CHAVE" ] || exit 0
+          for f in fotos/*.txt fotos/*.jsonl; do
+            [ -f "$f" ] && sed -i '' "s/$CHAVE/<chave>/g" "$f"
+          done
+          grep -rl "$CHAVE" fotos/ && { echo "A CHAVE AINDA ESTA EM ALGUM ARQUIVO"; exit 1; } || echo "chave apagada"
+
+      # SO GUARDA SE A LIMPEZA DEU CERTO. O repositorio e publico: subir os
+      # arquivos com a chave dentro, por causa de um "always", seria vazar a
+      # sessao pra qualquer um.
+      - name: Guardar o resultado
+        if: always() && steps.limpar.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: medicao-salas
+          path: fotos/
