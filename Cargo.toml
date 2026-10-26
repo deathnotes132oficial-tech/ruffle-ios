@@ -8,7 +8,24 @@ rust-version = "1.81"
 publish = false
 
 [features]
-default = ["render_debug_labels"]
+# SEM render_debug_labels POR PADRAO.
+#
+# Esse recurso so serve pra ferramenta de depuracao de placa de video: poe
+# rotulos e GRUPOS DE DEPURACAO em cada passo do desenho. Na base nova do
+# Ruffle (copia skua) ele derruba o app no meio do jogo:
+#
+#   wgpu error: Validation Error
+#     In a CommandEncoder
+#       A debug group was not popped before the encoder was finished
+#
+# A skua encerra e troca o codificador no meio do quadro quando passa de 64
+# passos ("orcamento de passes", pra nao acumular trabalho na placa), e faz
+# isso por baixo de um escopo do wgpu_profiler — que, com este recurso
+# ligado, deixou um grupo aberto. Sem o recurso nao existe grupo nenhum, e
+# o corte vira valido. Medido no simulador: a 50 s de carregamento do DDTank.
+#
+# Quem precisar depurar a placa de video liga na mao (--features).
+default = []
 render_debug_labels = ["ruffle_render_wgpu/render_debug_labels"]
 
 [dependencies]
