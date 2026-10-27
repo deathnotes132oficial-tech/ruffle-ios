@@ -237,9 +237,13 @@ for c in range(1, CICLOS + 1):
     clicar(PORTA)
     esperar(4, c, "fora")
     if not na_lista():
-        esperar(4, c, "fora")
+        # Mesma segunda chance do Inicio: um clique as vezes se perde. Na
+        # primeira rodada completa, a porta pegou nos ciclos 1 e 2 e nao no 3,
+        # com o jogo parado dentro da sala esperando.
+        clicar(PORTA)
+        esperar(5, c, "fora")
         if not na_lista():
-            parar("a porta nao devolveu a lista de salas", c)
+            parar("a porta nao devolveu a lista de salas duas vezes", c)
     esperar(ESPERA - 4, c, "fora")
     print("ciclo %d/%d  memoria %s MB" % (c, CICLOS, memoria()), flush=True)
 
