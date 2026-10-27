@@ -436,6 +436,37 @@ pub fn app_residente_mb() -> Option<u64> {
     }
 }
 
+/// TASK_VM_INFO. A contagem vai com folga: o sistema preenche so as revisoes
+/// da estrutura que ele conhece e devolve em `quantos` ate onde chegou.
+const TASK_VM_INFO: u32 = 22;
+const TASK_VM_INFO_PALAVRAS: u32 = 96;
+
+/// O "PHYSICAL FOOTPRINT": o numero que o iOS usa pra fechar o aplicativo.
+///
+/// O residente (acima) fica menor que ele, porque nao conta a memoria que o
+/// sistema comprimiu — e o iOS conta. Devolve (agora, pico da sessao) em MB;
+/// o pico so existe da revisao 3 da estrutura em diante.
+pub fn footprint_mb() -> Option<(u64, Option<u64>)> {
+    let mut dados = [0u32; TASK_VM_INFO_PALAVRAS as usize];
+    let mut quantos = TASK_VM_INFO_PALAVRAS;
+
+    unsafe {
+        if task_info(mach_task_self(), TASK_VM_INFO, dados.as_mut_ptr(), &mut quantos) != 0 {
+            return None;
+        }
+    }
+
+    // phys_footprint no byte 144 (palavra 36); ledger_phys_footprint_peak no
+    // byte 168 (palavra 42), presente quando vieram ao menos 44 palavras.
+    let palavra64 = |i: usize| (dados[i] as u64) | ((dados[i + 1] as u64) << 32);
+    let agora = palavra64(36);
+    if quantos < 38 || agora == 0 {
+        return None;
+    }
+    let pico = (quantos >= 44).then(|| palavra64(42) / (1024 * 1024));
+    Some((agora / (1024 * 1024), pico))
+}
+
 // NAO ADIANTA PEDIR MEMORIA DE VOLTA AO malloc.
 //
 // Havia aqui uma chamada a `malloc_zone_pressure_relief`, apostando que as

@@ -6,15 +6,15 @@ use std::time::Instant;
 use objc2::rc::{Allocated, Retained};
 use objc2::runtime::AnyClass;
 use objc2::{define_class, msg_send, sel, ClassType, DefinedClass as _};
-use objc2_core_foundation::CGRect;
+use objc2_core_foundation::{CGPoint, CGRect, CGSize};
 use objc2_foundation::{
     MainThreadMarker, NSCoder, NSDate, NSObjectProtocol, NSRunLoop, NSRunLoopCommonModes, NSSet,
     NSString, NSTimer,
 };
 use objc2_quartz_core::{CALayer, CALayerDelegate, CAMetalLayer};
 use objc2_ui_kit::{
-    UIEvent, UIKey, UIKeyInput, UIPress, UIPressPhase, UIPressesEvent, UITextInputTraits, UITouch,
-    UITouchPhase, UIView, UIViewContentMode,
+    UIColor, UIEvent, UIFont, UIKey, UIKeyInput, UILabel, UIPress, UIPressPhase, UIPressesEvent,
+    UITextInputTraits, UITouch, UITouchPhase, UIView, UIViewContentMode,
 };
 use ruffle_core::events::{
     KeyDescriptor, KeyLocation, LogicalKey, MouseButton, NamedKey, PhysicalKey, TextControlCode,
@@ -66,6 +66,8 @@ pub struct Ivars {
     /// quadro enquanto o cursor estivesse no campo — 60 pedidos por segundo
     /// pra uma coisa que ja esta aberta.
     mostrando_teclado: Cell<bool>,
+    /// A memoria no alto da tela, pra quem testa ver o que o iOS ve.
+    contador: OnceCell<Retained<UILabel>>,
 }
 
 impl fmt::Debug for Ivars {
@@ -337,6 +339,56 @@ impl PlayerView {
         // when live-resizing or mouse dragging the window.
         unsafe { NSRunLoop::mainRunLoop().addTimer_forMode(&timer, NSRunLoopCommonModes) };
         self.ivars().timer.set(timer).expect("init timer only once");
+
+        // A MEMORIA NA TELA, PRO TESTADOR.
+        //
+        // E o mesmo numero que o iOS usa pra fechar o aplicativo. Quem testa
+        // anota o que estava abrindo quando ele subiu — e, se o app fechar,
+        // o ultimo valor que viu.
+        let mtm = MainThreadMarker::from(self);
+        let contador = unsafe { UILabel::initWithFrame(mtm.alloc(), CGRect::ZERO) };
+        unsafe {
+            contador.setFont(Some(&UIFont::boldSystemFontOfSize(12.0)));
+            contador.setTextColor(Some(&UIColor::whiteColor()));
+            contador.setBackgroundColor(Some(&UIColor::colorWithWhite_alpha(0.0, 0.55)));
+        }
+        contador.setUserInteractionEnabled(false);
+        self.addSubview(&contador);
+        let _ = self.ivars().contador.set(contador);
+    }
+
+    /// Escreve a memoria no alto da tela: agora, o pico, e quanto falta pro
+    /// iOS fechar o aplicativo. Fica vermelho com menos de 500 MB de sobra.
+    fn mostrar_memoria(&self) {
+        let Some(contador) = self.ivars().contador.get() else {
+            return;
+        };
+        let Some((agora, pico)) = crate::registro::footprint_mb() else {
+            return;
+        };
+        let mut texto = format!(" memória {agora} MB");
+        if let Some(pico) = pico {
+            texto += &format!("  pico {pico} MB");
+        }
+        let sobra = crate::registro::memoria_livre_mb();
+        if let Some(sobra) = sobra {
+            texto += &format!("  sobra {sobra} MB");
+        }
+        texto.push(' ');
+        let perto = sobra.is_some_and(|s| s < 500);
+        let largura = self.bounds().size.width;
+        unsafe {
+            contador.setText(Some(&NSString::from_str(&texto)));
+            contador.setTextColor(Some(&if perto {
+                UIColor::redColor()
+            } else {
+                UIColor::whiteColor()
+            }));
+        }
+        contador.setFrame(CGRect::new(
+            CGPoint::new((largura - 380.0) / 2.0, 0.0),
+            CGSize::new(380.0, 18.0),
+        ));
     }
 
     pub fn set_player(&self, player: Arc<Mutex<Player>>) {
@@ -497,6 +549,7 @@ impl PlayerView {
                 // sala, a memoria parou de crescer depois da sexta sala.
             }
             crate::registro::anotar_memoria();
+            self.mostrar_memoria();
 
         }
 
