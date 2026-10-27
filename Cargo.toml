@@ -61,7 +61,7 @@ objc2-quartz-core = "0.3.2"
 # Se um dia esse conserto entrar no Ruffle de verdade, basta trocar estas sete
 # linhas de volta para https://github.com/ruffle-rs/ruffle.git. Nada mais no
 # projeto depende da copia.
-ruffle_core = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "ios-skua", features = [
+ruffle_core = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "ios-skua-memoria", features = [
     "audio",
     "symphonia",
     "mp3",
@@ -70,16 +70,16 @@ ruffle_core = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git",
     "default_compatibility_rules",
     "default_font",
 ] }
-ruffle_render = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "ios-skua" }
-ruffle_render_wgpu = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "ios-skua" }
-ruffle_video = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "ios-skua" }
-ruffle_video_software = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "ios-skua" }
-ruffle_frontend_utils = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "ios-skua", features = [
+ruffle_render = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "ios-skua-memoria" }
+ruffle_render_wgpu = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "ios-skua-memoria" }
+ruffle_video = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "ios-skua-memoria" }
+ruffle_video_software = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "ios-skua-memoria" }
+ruffle_frontend_utils = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "ios-skua-memoria", features = [
     "cpal",
     "fs",
     "navigator",
 ] }
-flv-rs = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "ios-skua" }
+flv-rs = { git = "https://github.com/deathnotes132oficial-tech/ruffle.git", branch = "ios-skua-memoria" }
 
 # A VERSAO TEM QUE SER A MESMA QUE O RUFFLE USA.
 #

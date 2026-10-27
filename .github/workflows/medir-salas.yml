@@ -51,7 +51,7 @@ jobs:
 
       - name: Conferir o segredo
         env:
-          LINK: ${{ secrets.JOGO_LINK }}
+          LINK: ${{ secrets.JOGO_LINK2 }}
         run: |
           if [ -z "$LINK" ]; then
             echo "Falta o segredo JOGO_LINK (o link do jogo com user= e key=)."
@@ -124,7 +124,7 @@ jobs:
 
       - name: Abrir o jogo e medir
         env:
-          LINK: ${{ secrets.JOGO_LINK }}
+          LINK: ${{ secrets.JOGO_LINK2 }}
           ID: ${{ steps.telefone.outputs.id }}
           APP: ${{ steps.abrir.outputs.nome }}
           CICLOS: ${{ inputs.ciclos }}
@@ -145,7 +145,7 @@ jobs:
         id: limpar
         if: always()
         env:
-          LINK: ${{ secrets.JOGO_LINK }}
+          LINK: ${{ secrets.JOGO_LINK2 }}
         run: |
           CHAVE=$(printf '%s' "$LINK" | sed -nE 's/.*[?&]key=([^&]+).*/\1/p')
           [ -n "$CHAVE" ] || exit 0
