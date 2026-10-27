@@ -79,6 +79,7 @@ X_DO_ANUNCIO = (792, 144, 826, 178)
 X_DO_DESCONECTADO = (727, 213, 758, 244)
 
 ESPERA = 9
+BARRA_DE_CARREGAMENTO = (320, 370, 690, 388)
 
 os.makedirs(SAIDA, exist_ok=True)
 t0 = time.time()
@@ -285,6 +286,19 @@ def esperar_ate(condicao, segundos, ciclo, fase):
 # ---------------------------------------------------------------- chegar
 print("esperando o jogo subir...", flush=True)
 esperar(120, 0, "carregando")
+# A TELA DE CARREGAMENTO PODE DEMORAR MAIS QUE ISSO.
+# Em 27/10 a medicao comecou a clicar com o jogo ainda em "Carregando...
+# 100%". A barra azul/rosa cobre 58% desta faixa no carregamento e no
+# maximo 1% no salao.
+for _ in range(60):
+    if not tem(foto(), BARRA_DE_CARREGAMENTO, lambda r, g, b: b > 150 and g < 120, 30):
+        break
+    if processo()[0] is None:
+        break
+    esperar(15, 0, "carregando")
+else:
+    parar("o jogo nao saiu da tela de carregamento em 15 min", 0)
+esperar(20, 0, "carregando")
 foto("0-depois-de-carregar.png")
 if processo()[0] is None:
     parar("o APLICATIVO MORREU carregando o jogo", 0)
