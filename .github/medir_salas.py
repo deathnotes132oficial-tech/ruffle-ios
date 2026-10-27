@@ -326,16 +326,16 @@ if GESTO == "sociedade":
             parar("a porta nao fechou a Sociedade duas vezes", c)
         esperar(ESPERA, c, "salao")
         print("ciclo %d/%d  footprint %s MB" % (c, CICLOS, memoria()), flush=True)
-        # QUEM ALOCOU A MEMORIA. O app roda com MallocStackLogging=lite, entao
-        # o malloc_history diz, por tamanho, de onde veio cada bloco vivo.
-        # O footprint separa grafico (IOAccelerator/IOSurface) de CPU (MALLOC).
+        # ONDE ESTA A MEMORIA. O footprint separa grafico (IOAccelerator,
+        # IOSurface) de CPU (MALLOC); o heap conta os blocos vivos por tipo.
+        # (Rastro de alocacao com MallocStackLogging no lancamento impediu o
+        # app de abrir no simulador, 27/10.)
         pid, _ = processo()
         if pid:
             with open(os.path.join(SAIDA, "regioes.txt"), "a") as f:
                 f.write("==== ciclo " + str(c) + "\n" + tudo("sudo", "-n", "footprint", "-p", str(pid)) + "\n")
-            with open(os.path.join(SAIDA, "quem-alocou-%d.txt" % c), "w") as f:
+            with open(os.path.join(SAIDA, "heap-%d.txt" % c), "w") as f:
                 f.write(tudo("sudo", "-n", "heap", "-s", str(pid))[:400000] + "\n")
-                f.write(tudo("sudo", "-n", "malloc_history", str(pid), "-allBySize")[:3000000] + "\n")
 
 else:
     chegou = False
