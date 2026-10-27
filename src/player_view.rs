@@ -377,13 +377,14 @@ impl PlayerView {
         texto.push(' ');
         let perto = sobra.is_some_and(|s| s < 500);
         let largura = self.bounds().size.width;
+        let cor = if perto {
+            UIColor::redColor()
+        } else {
+            UIColor::whiteColor()
+        };
         unsafe {
             contador.setText(Some(&NSString::from_str(&texto)));
-            contador.setTextColor(Some(&if perto {
-                UIColor::redColor()
-            } else {
-                UIColor::whiteColor()
-            }));
+            contador.setTextColor(Some(&cor));
         }
         contador.setFrame(CGRect::new(
             CGPoint::new((largura - 380.0) / 2.0, 0.0),
