@@ -317,6 +317,15 @@ if GESTO == "sociedade":
             parar("a porta nao fechou a Sociedade duas vezes", c)
         esperar(ESPERA, c, "salao")
         print("ciclo %d/%d  footprint %s MB" % (c, CICLOS, memoria()), flush=True)
+        # ONDE ESTA A MEMORIA: a tabela de regioes do vmmap a cada volta.
+        # Separa grafico (IOAccelerator/IOSurface) de CPU (MALLOC_*), pra
+        # nao precisar de outra rodada se o conserto nao segurar.
+        pid, _ = processo()
+        if pid:
+            with open(os.path.join(SAIDA, "regioes.txt"), "a") as f:
+                f.write("==== ciclo %d
+%s
+" % (c, sh("sudo", "-n", "vmmap", "--summary", pid)))
 
 else:
     chegou = False
