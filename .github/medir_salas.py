@@ -323,9 +323,7 @@ if GESTO == "sociedade":
         pid, _ = processo()
         if pid:
             with open(os.path.join(SAIDA, "regioes.txt"), "a") as f:
-                f.write("==== ciclo %d
-%s
-" % (c, sh("sudo", "-n", "vmmap", "--summary", pid)))
+                f.write("==== ciclo " + str(c) + chr(10) + sh("sudo", "-n", "vmmap", "--summary", pid) + chr(10))
 
 else:
     chegou = False
