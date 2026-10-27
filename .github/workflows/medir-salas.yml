@@ -37,7 +37,7 @@ on:
           - iPad
 
 concurrency:
-  group: medir-salas
+  group: medir-salas-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
