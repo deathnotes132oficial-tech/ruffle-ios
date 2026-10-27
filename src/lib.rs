@@ -6,6 +6,21 @@ use tracing_subscriber::fmt::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
+// O ALOCADOR: MIMALLOC, E NAO O DO SISTEMA.
+//
+// Medido no simulador (27/10), abrindo e fechando a Sociedade do DDTank: de
+// 5279 MB de footprint, 4243 MB estavam na zona de blocos pequenos do malloc
+// do sistema (MALLOC_NANO), e ela cresceu 985 MB numa unica volta. O que
+// estava em uso de verdade (residente) era uns 800 MB — e o coletor do
+// Ruffle percorre tudo o que esta vivo o tempo todo, entao memoria viva nao
+// fica parada. Era memoria JA LIBERADA que o alocador do sistema guarda e nao
+// devolve; o iOS cobra ela do aplicativo. No navegador o alocador e outro, e
+// o vazamento grande nao aparece.
+//
+// O mimalloc devolve ao sistema as paginas que ficam livres.
+#[global_allocator]
+static ALOCADOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 mod add_controller;
 mod app_delegate;
 mod edit_controller;
