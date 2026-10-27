@@ -88,6 +88,15 @@ def sh(*args):
     return subprocess.run(args, capture_output=True, text=True).stdout.strip()
 
 
+def tudo(*args):
+    """Saida e erro juntos: ferramenta que falha calada nao vira linha vazia."""
+    try:
+        r = subprocess.run(args, capture_output=True, text=True, timeout=600)
+        return r.stdout + r.stderr
+    except subprocess.TimeoutExpired:
+        return "(passou de 10 min)"
+
+
 DOCS = os.path.join(sh("xcrun", "simctl", "get_app_container", ID, APP, "data"), "Documents")
 print("pasta do aplicativo:", DOCS, flush=True)
 
@@ -317,13 +326,16 @@ if GESTO == "sociedade":
             parar("a porta nao fechou a Sociedade duas vezes", c)
         esperar(ESPERA, c, "salao")
         print("ciclo %d/%d  footprint %s MB" % (c, CICLOS, memoria()), flush=True)
-        # ONDE ESTA A MEMORIA: a tabela de regioes do vmmap a cada volta.
-        # Separa grafico (IOAccelerator/IOSurface) de CPU (MALLOC_*), pra
-        # nao precisar de outra rodada se o conserto nao segurar.
+        # QUEM ALOCOU A MEMORIA. O app roda com MallocStackLogging=lite, entao
+        # o malloc_history diz, por tamanho, de onde veio cada bloco vivo.
+        # O footprint separa grafico (IOAccelerator/IOSurface) de CPU (MALLOC).
         pid, _ = processo()
         if pid:
             with open(os.path.join(SAIDA, "regioes.txt"), "a") as f:
-                f.write("==== ciclo " + str(c) + chr(10) + sh("sudo", "-n", "vmmap", "--summary", pid) + chr(10))
+                f.write("==== ciclo " + str(c) + "\n" + tudo("sudo", "-n", "footprint", "-p", str(pid)) + "\n")
+            with open(os.path.join(SAIDA, "quem-alocou-%d.txt" % c), "w") as f:
+                f.write(tudo("sudo", "-n", "heap", "-s", str(pid))[:400000] + "\n")
+                f.write(tudo("sudo", "-n", "malloc_history", str(pid), "-allBySize")[:3000000] + "\n")
 
 else:
     chegou = False

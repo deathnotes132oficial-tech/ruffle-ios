@@ -136,6 +136,8 @@ jobs:
           xcrun simctl spawn "$ID" log stream --style compact \
             --predicate 'eventMessage CONTAINS "REPARTICAO" OR eventMessage CONTAINS "BIBLIOTECA" OR eventMessage CONTAINS "ROTEIRO"' \
             > fotos/sonda.txt 2>&1 &
+          # Rastro de quem aloca cada bloco vivo, pro malloc_history.
+          SIMCTL_CHILD_MallocStackLogging=lite \
           xcrun simctl launch --console-pty "$ID" "$APP" --jogo "$LINK" --roteiro \
             > fotos/o-que-o-app-disse.txt 2>&1 &
           python3 .github/medir_salas.py
