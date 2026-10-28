@@ -542,18 +542,15 @@ impl PlayerView {
             // veio, e manter isso rodando duas vezes por segundo passou a ser
             // so custo. O que ficou e a limpeza, que conserta.
             if self.ivars().player.get().is_some() {
-                // APERTOU: PEDE UMA COLETA COMPLETA ANTES DE MEDIR.
+                // A COLETA FORCADA SAIU (28/10).
                 //
-                // O coletor do Ruffle se guia pelo tamanho dos objetos, e nao
-                // pela carga pendurada neles, entao ele nao percebe quando um
-                // punhado de objetos mortos esta segurando gigabytes. Quem
-                // percebe e daqui, que enxerga a memoria do aparelho.
-                //
-                // Antes de medir, de proposito: assim a linha do registro ja
-                // mostra o resultado da coleta, e nao o estado anterior a ela.
-                if folga < 1200 {
-                    self.player_lock().coletar_tudo();
-                }
+                // Ela chamava uma volta completa do coletor por segundo quando a
+                // folga ficava abaixo de 1,2 GB — so no iPhone, porque o
+                // simulador nao mede folga. Na base nova isso apagava conteudo
+                // ainda em uso (build 50: o app fechava toda vez no iPhone 13) e,
+                // pelo caminho certo, apagava modulos que o jogo ainda carregava
+                // (a tela parava em 100%). A memoria boa foi medida sem ela: o
+                // que segura o crescimento e o mimalloc.
                 // A VARREDURA SAIU.
                 //
                 // Ela soltava texturas e malhas paradas na nossa copia antiga

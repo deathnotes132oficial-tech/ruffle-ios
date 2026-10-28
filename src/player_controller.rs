@@ -1370,15 +1370,11 @@ impl PlayerController {
     fn soltar_do_jogo(&self) -> Option<String> {
         let jogo = self.ivars().player.get()?;
         let mut travado = jogo.lock().ok()?;
-        // NA BASE NOVA, SO SOBRA A COLETA.
-        //
-        // O devolver_memoria() da copia antiga soltava texturas e malhas
-        // paradas e segurava a fila de carregamento — as tres coisas eram
-        // pecas daquela copia. A base nova apara os depositos de textura
-        // sozinha e nao tem a fila. O que ainda vale fazer quando o iOS avisa
-        // e uma volta completa do coletor.
-        let coletados = travado.coletar_tudo();
-        Some(format!("coleta completa: {coletados} objeto(s) liberado(s)"))
+        // SO ANOTA. A coleta completa que vinha aqui saiu (28/10): na base
+        // nova ela apagava conteudo em uso e modulos ainda carregando. Ver
+        // player_view.rs, "A COLETA FORCADA SAIU".
+        let _ = &mut travado;
+        Some("sem coleta forcada".to_string())
     }
 
     #[track_caller]
