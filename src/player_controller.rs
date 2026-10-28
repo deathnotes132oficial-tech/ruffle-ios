@@ -55,6 +55,8 @@ const MUDO: isize = 21;
 const TECLADO: isize = 22;
 /// Onde a escolha de som fica guardada entre uma partida e outra.
 const CHAVE_MUDO: &str = "som_mudo";
+/// Se o numero da memoria aparece. Comeca escondido (so o pontinho).
+const CHAVE_MEMORIA: &str = "mostrar_memoria";
 
 #[derive(Clone, Debug)]
 pub struct FutureSpawner {
@@ -146,6 +148,11 @@ pub struct Ivars {
     seta: RefCell<Option<Retained<UILabel>>>,
     /// Onde o ponteiro esta agora, em coordenadas da tela.
     onde_mouse: Cell<CGPoint>,
+
+    /// O toque da memoria: o pontinho quando ela esta escondida, e a area
+    /// em cima do numero quando ela aparece. Fora de `controles` de
+    /// proposito: o olho esconde os controles, e o contador e outra escolha.
+    toque_memoria: RefCell<Option<Retained<UIButton>>>,
 }
 
 impl fmt::Debug for Ivars {
@@ -306,6 +313,15 @@ define_class!(
                 return;
             };
             self.proxima_tecla_livre(botao.tag());
+        }
+
+        /// Tocar no pontinho mostra a memoria; tocar no numero esconde.
+        #[unsafe(method(alternarMemoria:))]
+        fn alternarMemoria(&self, _botao: &UIButton) {
+            let mostrar = !Self::memoria_a_mostra();
+            let padroes = unsafe { NSUserDefaults::standardUserDefaults() };
+            unsafe { padroes.setBool_forKey(mostrar, &NSString::from_str(CHAVE_MEMORIA)) };
+            self.aplicar_memoria();
         }
 
         #[unsafe(method(controleSolto:))]
@@ -843,6 +859,7 @@ impl PlayerController {
         // tracing nao saem, e a gente fica sem saber se isto rodou.
         eprintln!("CONTROLES criados: {}", guardados.len());
         drop(guardados);
+        self.criar_toque_memoria();
         self.criar_mouse();
         self.aplicar_paleta();
         // Posiciona ja: se a gente esperar so pelo momento em que a tela se
@@ -951,6 +968,79 @@ impl PlayerController {
             ));
         }
         self.desenhar_seta();
+        self.posicionar_memoria(largura, altura, escala_jogo, folga);
+    }
+
+    /// A MEMORIA FICA NA FAIXA PRETA DA DIREITA, NO ALTO.
+    ///
+    /// No canto de cima do jogo ficam botoes do proprio DDTank (GM, som), e
+    /// um toque ali nao pode ir parar no contador. A faixa preta e onde o
+    /// jogo nao desenha. No iPad o jogo ocupa a largura toda e a sobra fica
+    /// em cima e embaixo; ai o contador vai pra faixa de cima, a direita.
+    fn posicionar_memoria(&self, largura: f64, altura: f64, escala_jogo: f64, folga: f64) {
+        let margens = unsafe { self.view().safeAreaInsets() };
+        let lado_faixa = (largura - 1000.0 * escala_jogo) / 2.0;
+        let faixa_cima = (altura - 600.0 * escala_jogo) / 2.0;
+        let onde = if lado_faixa - margens.right >= 36.0 {
+            CGRect::new(
+                CGPoint::new(largura - lado_faixa, folga),
+                CGSize::new(lado_faixa - margens.right, 32.0),
+            )
+        } else if faixa_cima >= 16.0 {
+            let w = 90.0;
+            CGRect::new(
+                CGPoint::new(largura - margens.right - w - folga, margens.top),
+                CGSize::new(w, faixa_cima.min(32.0)),
+            )
+        } else {
+            // Sem faixa nenhuma: o canto mesmo, pequeno.
+            CGRect::new(
+                CGPoint::new(largura - margens.right - 44.0, margens.top),
+                CGSize::new(44.0, 32.0),
+            )
+        };
+        if let Some(toque) = self.ivars().toque_memoria.borrow().as_ref() {
+            toque.setFrame(onde);
+        }
+        self.view().posicionar_contador(onde);
+    }
+
+    fn criar_toque_memoria(&self) {
+        let mtm = MainThreadMarker::from(self);
+        let toque = unsafe { UIButton::buttonWithType(UIButtonType::Custom, mtm) };
+        unsafe {
+            toque.setTitleColor_forState(
+                Some(&UIColor::colorWithWhite_alpha(1.0, 0.35)),
+                UIControlState::Normal,
+            );
+            toque.addTarget_action_forControlEvents(
+                Some(self),
+                sel!(alternarMemoria:),
+                UIControlEvents::TouchUpInside,
+            );
+        }
+        self.view().addSubview(&toque);
+        *self.ivars().toque_memoria.borrow_mut() = Some(toque);
+        self.aplicar_memoria();
+    }
+
+    /// O que esta guardado. Nunca escolheu = escondido.
+    fn memoria_a_mostra() -> bool {
+        let padroes = unsafe { NSUserDefaults::standardUserDefaults() };
+        unsafe { padroes.boolForKey(&NSString::from_str(CHAVE_MEMORIA)) }
+    }
+
+    fn aplicar_memoria(&self) {
+        let mostrar = Self::memoria_a_mostra();
+        if let Some(toque) = self.ivars().toque_memoria.borrow().as_ref() {
+            // O pontinho so quando o numero esta escondido; com o numero na
+            // tela, o botao continua ali, transparente, pra receber o toque.
+            let rotulo = if mostrar { "" } else { "\u{25CF}" };
+            unsafe {
+                toque.setTitle_forState(Some(&NSString::from_str(rotulo)), UIControlState::Normal)
+            };
+        }
+        self.view().definir_contador_visivel(mostrar);
     }
 
     /// Monta a area do ponteiro e a setinha.
