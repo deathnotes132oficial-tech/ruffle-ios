@@ -1,0 +1,138 @@
+# Teste do botao do site com o aplicativo FECHADO (28/10).
+#
+# O testador tocava em "Entrar no jogo" e o aplicativo abria na tela inicial.
+# Aqui o aplicativo e instalado e nunca aberto; o link deathnote:// e entregue
+# pelo sistema, do mesmo jeito que o Safari entrega. O link vem do segredo
+# JOGO_LINK (o repositorio e publico) e a chave e apagada antes de guardar.
+
+name: Link com o app fechado
+
+on:
+  push:
+    branches: [teste-link-frio]
+
+jobs:
+  testar:
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Pegar o codigo
+        uses: actions/checkout@v4
+
+      - name: Conferir o segredo
+        env:
+          LINK: ${{ secrets.JOGO_LINK }}
+        run: |
+          [ -n "$LINK" ] || { echo "Falta o segredo JOGO_LINK."; exit 1; }
+          echo "segredo presente (${#LINK} caracteres)"
+
+      - name: Instalar o alvo de simulador
+        run: |
+          rustup show
+          rustup target add aarch64-apple-ios-sim
+
+      - name: Descobrir o nome do projeto
+        id: achar
+        run: |
+          set -e
+          PROJETO=$(ls -d *.xcodeproj | head -1)
+          ESQUEMA=$(xcodebuild -list -project "$PROJETO" -json \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['project']['schemes'][0])")
+          echo "projeto=$PROJETO" >> $GITHUB_OUTPUT
+          echo "esquema=$ESQUEMA" >> $GITHUB_OUTPUT
+
+      # Igual ao "Rodar no simulador", de proposito: medir outra compilacao
+      # seria medir outra coisa.
+      - name: Compilar para o simulador
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project "${{ steps.achar.outputs.projeto }}" \
+            -scheme "${{ steps.achar.outputs.esquema }}" \
+            -configuration Release \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath construcao \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            INFOPLIST_KEY_CFBundleDisplayName="CF Client" \
+            INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
+            INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad="UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
+            INFOPLIST_KEY_UIRequiresFullScreen=YES \
+            build
+
+      - name: Ligar o aparelho simulado
+        id: telefone
+        run: |
+          set -e
+          ESCOLHA="iPhone"
+          [ -z "$ESCOLHA" ] && ESCOLHA="iPhone"
+          if [ "$ESCOLHA" = "iPad" ]; then ESCOLHA="iPad Air 11-inch (M3)"; fi
+          export ESCOLHA
+          xcrun simctl list devices available -j > /tmp/aparelhos.json
+          ESCOLHER='import json,os,sys; d=json.load(open("/tmp/aparelhos.json"))["devices"]; e=os.environ["ESCOLHA"]; c=[x for v in d.values() for x in v if e in x["name"]]; print(c[-1][sys.argv[1]] if c else "")'
+          ID=$(python3 -c "$ESCOLHER" udid)
+          NOME=$(python3 -c "$ESCOLHER" name)
+          [ -n "$ID" ] || { echo "Nenhum $ESCOLHA pronto."; exit 1; }
+          echo "usando: $NOME ($ID)"
+          xcrun simctl boot "$ID" || true
+          xcrun simctl bootstatus "$ID" -b
+          echo "id=$ID" >> $GITHUB_OUTPUT
+
+      - name: Instalar o aplicativo
+        id: abrir
+        run: |
+          set -e
+          APLICATIVO=$(find construcao/Build/Products -maxdepth 3 -name '*.app' | head -1)
+          NOME=$(defaults read "$PWD/$APLICATIVO/Info" CFBundleIdentifier)
+          xcrun simctl install "${{ steps.telefone.outputs.id }}" "$APLICATIVO"
+          echo "nome=$NOME" >> $GITHUB_OUTPUT
+          pip3 install --quiet --break-system-packages pillow || pip3 install --quiet pillow
+
+      - name: Tocar o link com o app fechado
+        env:
+          LINK: ${{ secrets.JOGO_LINK }}
+          ID: ${{ steps.telefone.outputs.id }}
+          APP: ${{ steps.abrir.outputs.nome }}
+        run: |
+          mkdir -p fotos
+          xcrun simctl terminate "$ID" "$APP" 2>/dev/null || true
+          sleep 3
+          if ps -Ao comm= | grep -qi ruffle-ios; then echo "o app ja estava aberto: teste invalido"; exit 1; fi
+          echo "app fechado: ok"
+          LINKAPP="deathnote://jogar?u=$(python3 -c 'import os,urllib.parse;print(urllib.parse.quote(os.environ["LINK"],safe=""))')"
+          xcrun simctl openurl "$ID" "$LINKAPP"
+          for i in $(seq 1 12); do
+            sleep 10
+            xcrun simctl io "$ID" screenshot "fotos/t$((i*10))s.png" >/dev/null 2>&1
+            if ps -Ao comm= | grep -qi ruffle-ios; then echo "$((i*10))s: vivo"; else echo "$((i*10))s: MORTO"; fi
+          done
+          DOCS="$(xcrun simctl get_app_container "$ID" "$APP" data)/Documents"
+          cp "$DOCS/registro.txt" fotos/ 2>/dev/null || true
+          if grep -q "abrindo o jogo" fotos/registro.txt 2>/dev/null; then
+            echo "RESULTADO: O JOGO ABRIU PELO LINK"
+          else
+            echo "RESULTADO: O LINK SE PERDEU"
+          fi
+
+      - name: Apagar a chave dos registros
+        id: limpar
+        if: always()
+        env:
+          LINK: ${{ secrets.JOGO_LINK }}
+        run: |
+          CHAVE=$(printf '%s' "$LINK" | sed -nE 's/.*[?&]key=([^&]+).*/\1/p')
+          [ -n "$CHAVE" ] || exit 0
+          for f in fotos/*.txt; do
+            [ -f "$f" ] && sed -i '' "s/$CHAVE/<chave>/g" "$f"
+          done
+          grep -rl "$CHAVE" fotos/ && { echo "A CHAVE AINDA ESTA EM ALGUM ARQUIVO"; exit 1; } || echo "chave apagada"
+
+      - name: Guardar o resultado
+        if: always() && steps.limpar.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-frio
+          path: fotos/
+          retention-days: 1
