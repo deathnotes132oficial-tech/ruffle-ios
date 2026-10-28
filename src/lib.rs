@@ -18,8 +18,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 // o vazamento grande nao aparece.
 //
 // O mimalloc devolve ao sistema as paginas que ficam livres.
-#[global_allocator]
-static ALOCADOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+// (teste: sem o mimalloc, pra isolar a queda)
 
 mod add_controller;
 mod app_delegate;
