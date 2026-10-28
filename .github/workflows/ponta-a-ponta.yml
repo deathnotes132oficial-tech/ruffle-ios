@@ -117,7 +117,7 @@ jobs:
             -destination "id=$ID" \
             -resultBundlePath resultado.xcresult \
             2>&1 | sed "s/$SENHA/<senha>/g" | tee fotos/teste.txt \
-            | grep -E 'PASSO:|error|failed|passed|Test Case|XCTAssert'
+            | grep -E 'PASSO:|ARVORE|error|failed|passed|Test Case|XCTAssert'
           RC=${PIPESTATUS[0]}
           kill $FOTOS
           echo "teste terminou com $RC"

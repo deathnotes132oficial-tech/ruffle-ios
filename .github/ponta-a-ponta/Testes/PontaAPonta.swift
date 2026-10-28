@@ -28,7 +28,7 @@ final class PontaAPonta: XCTestCase {
 
         let campoConta = safari.webViews.textFields.firstMatch
         XCTAssert(campoConta.waitForExistence(timeout: 60), "o formulario do site nao apareceu")
-        campoConta.tap()
+        focar(campoConta, safari)
         // O site lembra a ultima conta; apaga antes de digitar.
         if let atual = campoConta.value as? String, !atual.isEmpty {
             campoConta.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: atual.count))
@@ -37,13 +37,14 @@ final class PontaAPonta: XCTestCase {
 
         let campoSenha = safari.webViews.secureTextFields.firstMatch
         XCTAssert(campoSenha.waitForExistence(timeout: 10), "o campo de senha nao apareceu")
-        campoSenha.tap()
+        focar(campoSenha, safari)
         campoSenha.typeText(senha)
         passo("conta e senha digitadas")
 
         escolherServidor(safari)
         passo("servidor escolhido")
 
+        fecharDicas(safari)
         safari.webViews.buttons["ENTRAR NO JOGO"].firstMatch.tap()
         passo("formulario enviado")
         fecharSeHouver(safari, ["Not Now", "Agora Não", "Never for This Website"])
@@ -79,6 +80,7 @@ final class PontaAPonta: XCTestCase {
             return
         }
         if ((caixa.value as? String) ?? caixa.label).contains(servidor) { return }
+        fecharDicas(safari)
         caixa.tap()
 
         // iPhone mostra a roleta; versoes novas mostram um menu.
@@ -92,6 +94,31 @@ final class PontaAPonta: XCTestCase {
             .matching(NSPredicate(format: "label CONTAINS %@", servidor)).firstMatch
         XCTAssert(item.waitForExistence(timeout: 5), "o servidor nao apareceu na lista")
         item.tap()
+    }
+
+    /// TOCA NO CAMPO ATE ELE PEGAR O TECLADO.
+    ///
+    /// Na 1a rodada (28/10) uma dica do Safari ("View Bookmarks, Share
+    /// Menu...") abriu em cima do campo de senha e o toque caiu nela.
+    /// Fecha as dicas e confere o foco antes de digitar.
+    private func focar(_ campo: XCUIElement, _ safari: XCUIApplication) {
+        for _ in 0..<5 {
+            fecharDicas(safari)
+            campo.tap()
+            usleep(500_000)
+            if (campo.value(forKey: "hasKeyboardFocus") as? Bool) == true { return }
+        }
+        passo("campo sem foco")
+        print("ARVORE:\n\(safari.debugDescription)")
+        XCTFail("o campo nao pegou o teclado")
+    }
+
+    private func fecharDicas(_ safari: XCUIApplication) {
+        for nome in ["Close", "Fechar", "Dismiss"] {
+            let b = safari.buttons.matching(identifier: nome).allElementsBoundByIndex
+                .first { $0.exists && $0.isHittable }
+            b?.tap()
+        }
     }
 
     private func fecharSeHouver(_ app: XCUIApplication, _ nomes: [String]) {
