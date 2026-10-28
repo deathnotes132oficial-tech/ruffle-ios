@@ -1,0 +1,46 @@
+# Baixa os relatorios de erro que os testadores mandaram pelo TestFlight
+# ("Compartilhar" na tela de "Falhou"), sem precisar de Mac/Xcode.
+name: relatorio-erro
+on:
+  push:
+    branches: [relatorio-erro]
+jobs:
+  baixar:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pip install -q "pyjwt[crypto]" requests
+      - env:
+          P8: ${{ secrets.APPLE_P8 }}
+          ID_CHAVE: ${{ secrets.APPLE_KEY_ID }}
+          ID_EMISSOR: ${{ secrets.APPLE_ISSUER_ID }}
+        shell: python
+        run: |
+          import os, time, jwt, requests
+          agora = int(time.time())
+          token = jwt.encode({"iss": os.environ["ID_EMISSOR"], "iat": agora,
+                              "exp": agora + 1200, "aud": "appstoreconnect-v1"},
+                             os.environ["P8"], algorithm="ES256",
+                             headers={"kid": os.environ["ID_CHAVE"]})
+          h = {"Authorization": "Bearer " + token}
+          api = "https://api.appstoreconnect.apple.com/v1"
+          app = requests.get(api + "/apps", headers=h,
+                             params={"filter[bundleId]": "com.deathnotestore.cfclient"}).json()["data"][0]["id"]
+          r = requests.get(api + f"/apps/{app}/betaFeedbackCrashSubmissions", headers=h,
+                           params={"limit": 20})
+          print("lista:", r.status_code)
+          os.makedirs("saida", exist_ok=True)
+          for s in r.json().get("data", []):
+              a = s["attributes"]
+              # so o que importa; e-mail e nome do testador ficam de fora
+              cab = f"{a.get('createdDate')} | {a.get('deviceModel')} | iOS {a.get('osVersion')} | {a.get('comment')}"
+              print(s["id"], cab)
+              log = requests.get(api + f"/betaFeedbackCrashSubmissions/{s['id']}/crashLog", headers=h)
+              texto = log.json().get("data", {}).get("attributes", {}).get("logText", "") if log.ok else log.text
+              open(f"saida/{s['id']}.txt", "w").write(cab + "\n\n" + (texto or ""))
+          if not r.ok:
+              print(r.text)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: relatorios
+          path: saida
+          retention-days: 1
