@@ -526,7 +526,8 @@ impl PlayerView {
         // Abaixo de 1,5 GB de folga a medida passa a ser oito vezes por
         // segundo. E o pedaco que interessa, e so ele.
         let agora = Instant::now();
-        let folga = crate::registro::memoria_livre_mb().unwrap_or(u64::MAX);
+        // TESTE: o simulador nao mede a folga; fingir 1000 MB pra rodar o caminho do iPhone
+        let folga = crate::registro::memoria_livre_mb().unwrap_or(1000);
         let intervalo = if folga < 1500 { 125 } else { 2000 };
         let medir = match self.ivars().ultima_medida.get() {
             None => true,
