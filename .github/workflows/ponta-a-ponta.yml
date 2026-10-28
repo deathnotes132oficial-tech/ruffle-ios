@@ -1,0 +1,149 @@
+# O caminho do jogador, de ponta a ponta, no simulador (28/10).
+#
+# Com o CF Client fechado: Safari no site, login, servidor, "Entrar no jogo",
+# "Abrir" — e o jogo tem que comecar a abrir. Quem mexe na tela e o teste de
+# interface em .github/ponta-a-ponta (projeto montado na hora pelo xcodegen;
+# o projeto do aplicativo nao muda).
+#
+# Conta e senha da conta de TESTE vem dos segredos E2E_CONTA/E2E_SENHA, que
+# existem so durante o teste e sao apagados no fim.
+
+name: Ponta a ponta
+
+on:
+  push:
+    branches: [teste-ponta-a-ponta]
+
+jobs:
+  testar:
+    runs-on: macos-latest
+    timeout-minutes: 75
+
+    steps:
+      - name: Pegar o codigo
+        uses: actions/checkout@v4
+
+      - name: Conferir os segredos
+        env:
+          CONTA: ${{ secrets.E2E_CONTA }}
+          SENHA: ${{ secrets.E2E_SENHA }}
+        run: |
+          [ -n "$CONTA" ] && [ -n "$SENHA" ] || { echo "Faltam E2E_CONTA/E2E_SENHA."; exit 1; }
+          echo "segredos presentes"
+
+      - name: Instalar o alvo de simulador
+        run: |
+          rustup show
+          rustup target add aarch64-apple-ios-sim
+
+      - name: Descobrir o nome do projeto
+        id: achar
+        run: |
+          set -e
+          PROJETO=$(ls -d *.xcodeproj | head -1)
+          ESQUEMA=$(xcodebuild -list -project "$PROJETO" -json \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['project']['schemes'][0])")
+          echo "projeto=$PROJETO" >> $GITHUB_OUTPUT
+          echo "esquema=$ESQUEMA" >> $GITHUB_OUTPUT
+
+      # Igual ao "Rodar no simulador", de proposito: medir outra compilacao
+      # seria medir outra coisa.
+      - name: Compilar para o simulador
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project "${{ steps.achar.outputs.projeto }}" \
+            -scheme "${{ steps.achar.outputs.esquema }}" \
+            -configuration Release \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath construcao \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            INFOPLIST_KEY_CFBundleDisplayName="CF Client" \
+            INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone="UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
+            INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad="UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight" \
+            INFOPLIST_KEY_UIRequiresFullScreen=YES \
+            build
+
+      - name: Ligar o aparelho simulado
+        id: telefone
+        run: |
+          set -e
+          ESCOLHA="iPhone"
+          [ -z "$ESCOLHA" ] && ESCOLHA="iPhone"
+          if [ "$ESCOLHA" = "iPad" ]; then ESCOLHA="iPad Air 11-inch (M3)"; fi
+          export ESCOLHA
+          xcrun simctl list devices available -j > /tmp/aparelhos.json
+          ESCOLHER='import json,os,sys; d=json.load(open("/tmp/aparelhos.json"))["devices"]; e=os.environ["ESCOLHA"]; c=[x for v in d.values() for x in v if e in x["name"]]; print(c[-1][sys.argv[1]] if c else "")'
+          ID=$(python3 -c "$ESCOLHER" udid)
+          NOME=$(python3 -c "$ESCOLHER" name)
+          [ -n "$ID" ] || { echo "Nenhum $ESCOLHA pronto."; exit 1; }
+          echo "usando: $NOME ($ID)"
+          xcrun simctl boot "$ID" || true
+          xcrun simctl bootstatus "$ID" -b
+          echo "id=$ID" >> $GITHUB_OUTPUT
+
+      - name: Instalar o aplicativo
+        id: abrir
+        run: |
+          set -e
+          APLICATIVO=$(find construcao/Build/Products -maxdepth 3 -name '*.app' | head -1)
+          NOME=$(defaults read "$PWD/$APLICATIVO/Info" CFBundleIdentifier)
+          xcrun simctl install "${{ steps.telefone.outputs.id }}" "$APLICATIVO"
+          echo "nome=$NOME" >> $GITHUB_OUTPUT
+          pip3 install --quiet --break-system-packages pillow || pip3 install --quiet pillow
+
+      - name: Montar o projeto do teste
+        run: |
+          brew install xcodegen >/dev/null
+          cd .github/ponta-a-ponta && xcodegen generate
+
+      - name: Fazer o caminho do jogador
+        env:
+          TEST_RUNNER_CONTA: ${{ secrets.E2E_CONTA }}
+          TEST_RUNNER_SENHA: ${{ secrets.E2E_SENHA }}
+          TEST_RUNNER_APP: ${{ steps.abrir.outputs.nome }}
+          SENHA: ${{ secrets.E2E_SENHA }}
+          ID: ${{ steps.telefone.outputs.id }}
+        run: |
+          mkdir -p fotos
+          ( i=0; while :; do xcrun simctl io "$ID" screenshot "fotos/tela-$(printf %03d $i).png" >/dev/null 2>&1; i=$((i+5)); sleep 5; done ) &
+          FOTOS=$!
+          set +e
+          xcodebuild test \
+            -project .github/ponta-a-ponta/PontaAPonta.xcodeproj \
+            -scheme Testes \
+            -destination "id=$ID" \
+            -resultBundlePath resultado.xcresult \
+            2>&1 | sed "s/$SENHA/<senha>/g" | tee fotos/teste.txt \
+            | grep -E 'PASSO:|error|failed|passed|Test Case|XCTAssert'
+          RC=${PIPESTATUS[0]}
+          kill $FOTOS
+          echo "teste terminou com $RC"
+          exit 0
+
+      - name: Conferir se o jogo abriu
+        env:
+          ID: ${{ steps.telefone.outputs.id }}
+          APP: ${{ steps.abrir.outputs.nome }}
+        run: |
+          DOCS="$(xcrun simctl get_app_container "$ID" "$APP" data)/Documents"
+          cp "$DOCS/registro.txt" fotos/ 2>/dev/null || true
+          if ps -Ao comm= | grep -qi ruffle-ios; then echo "app vivo no fim"; else echo "app MORTO no fim"; fi
+          mkdir -p fotos/passos
+          xcrun xcresulttool export attachments --path resultado.xcresult --output-path fotos/passos >/dev/null 2>&1 || true
+          if grep -q "abrindo o jogo" fotos/registro.txt 2>/dev/null; then
+            echo "RESULTADO: O JOGO ABRIU PELO SITE"
+          else
+            echo "RESULTADO: O JOGO NAO ABRIU"
+            exit 1
+          fi
+
+      - name: Guardar o resultado
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ponta-a-ponta
+          path: fotos/
+          retention-days: 1
