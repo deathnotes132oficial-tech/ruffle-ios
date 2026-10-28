@@ -84,6 +84,25 @@ define_class!(
                     break;
                 }
             }
+
+            // O BOTAO DO SITE (deathnote://) COM O APLICATIVO FECHADO.
+            //
+            // Esse link vem por outro caminho: com o aplicativo aberto, o
+            // iPhone chama o scene:openURLContexts:; com ele fechado, NAO chama
+            // — entrega o endereco so aqui. Sem ler isto, o link se perdia e o
+            // jogador ficava parado na tela inicial (28/10).
+            //
+            // Arquivo .swf aberto de fora tambem chega aqui; o tocar_endereco
+            // ignora o que nao e da internet.
+            if self.ivars().link_esperando.borrow().is_none() {
+                for contexto in connection_options.URLContexts().iter() {
+                    if let Some(texto) = contexto.URL().absoluteString() {
+                        tracing::info!("link de esquema guardado pra quando a tela existir");
+                        *self.ivars().link_esperando.borrow_mut() = Some(texto.to_string());
+                        break;
+                    }
+                }
+            }
         }
 
         #[unsafe(method(sceneDidDisconnect:))]
