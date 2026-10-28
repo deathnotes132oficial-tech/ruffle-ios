@@ -23,11 +23,17 @@ final class PontaAPonta: XCTestCase {
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
 
         passo("abrindo o site")
-        safari.open(URL(string: "https://deathnotestore.com.br/jogar/")!)
-        fecharSeHouver(safari, ["Continue", "Continuar", "Not Now", "Agora Não"])
-
+        // Da maquina do GitHub o site as vezes nao responde na primeira
+        // (2a rodada, 28/10: "the server stopped responding"). Tenta 3 vezes.
         let campoConta = safari.webViews.textFields.firstMatch
-        XCTAssert(campoConta.waitForExistence(timeout: 60), "o formulario do site nao apareceu")
+        var carregou = false
+        for tentativa in 1...3 {
+            safari.open(URL(string: "https://deathnotestore.com.br/jogar/")!)
+            fecharSeHouver(safari, ["Continue", "Continuar", "Not Now", "Agora Não"])
+            if campoConta.waitForExistence(timeout: 45) { carregou = true; break }
+            passo("site nao carregou (tentativa \(tentativa))")
+        }
+        XCTAssert(carregou, "o formulario do site nao apareceu")
         focar(campoConta, safari)
         // O site lembra a ultima conta; apaga antes de digitar.
         if let atual = campoConta.value as? String, !atual.isEmpty {
