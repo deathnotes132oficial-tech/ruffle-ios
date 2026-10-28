@@ -212,8 +212,29 @@ def parar(motivo, ciclo):
     if desconectado(img) and "DESCONECT" not in motivo:
         motivo += " — e o jogo esta DESCONECTADO"
     print("PAROU no ciclo %d: %s (foto: parou.png)" % (ciclo, motivo), flush=True)
+    guardar_quebra()
     resumir()
     sys.exit(2)
+
+
+def guardar_quebra():
+    """A mensagem do panic: o registro do app (linha QUEBROU) e o .ips do sistema."""
+    import glob, shutil
+    time.sleep(5)
+    for nome in ("registro.txt", "registro-anterior.txt"):
+        try:
+            shutil.copy(os.path.join(DOCS, nome), os.path.join(SAIDA, nome))
+        except Exception as e:
+            print("sem", nome, e, flush=True)
+    for f in glob.glob(os.path.expanduser("~/Library/Logs/DiagnosticReports/*ruffle*")):
+        shutil.copy(f, SAIDA)
+    for nome in ("registro.txt", "registro-anterior.txt"):
+        try:
+            for linha in open(os.path.join(SAIDA, nome), encoding="utf8", errors="replace"):
+                if "QUEBROU" in linha:
+                    print(nome + ": " + linha.strip(), flush=True)
+        except Exception:
+            pass
 
 
 def resumir():
