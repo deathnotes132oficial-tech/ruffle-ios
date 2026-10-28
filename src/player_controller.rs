@@ -474,6 +474,7 @@ impl PlayerController {
             area_mouse: RefCell::new(None),
             seta: RefCell::new(None),
             onde_mouse: Cell::new(CGPoint::new(200.0, 200.0)),
+            toque_memoria: RefCell::new(None),
         });
         let nil = None::<&AnyObject>;
         unsafe { msg_send![super(this), initWithNibName: nil, bundle: nil] }
