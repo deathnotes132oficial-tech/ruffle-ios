@@ -16,7 +16,7 @@ on:
 
 jobs:
   testar:
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 75
 
     steps:
@@ -30,6 +30,13 @@ jobs:
         run: |
           [ -n "$CONTA" ] && [ -n "$SENHA" ] || { echo "Faltam E2E_CONTA/E2E_SENHA."; exit 1; }
           echo "segredos presentes"
+
+      - name: Usar o Xcode mais novo da maquina
+        run: |
+          ls -d /Applications/Xcode*.app
+          NOVO=$(ls -d /Applications/Xcode_[0-9]*.app | sort -V | tail -1)
+          [ -n "$NOVO" ] && sudo xcode-select -s "$NOVO"
+          xcodebuild -version
 
       - name: Instalar o alvo de simulador
         run: |
@@ -78,8 +85,7 @@ jobs:
           # O iOS MAIS NOVO QUE A MAQUINA TIVER (03/11): a build 52 morria so
           # no iOS 27, e o teste rodava no 26 e passava.
           ESCOLHER='import json,re,sys; d=json.load(open("/tmp/aparelhos.json"))["devices"]; v=lambda k: [int(n) for n in re.findall(r"[0-9]+", k.split("iOS-")[-1])]; ks=sorted([k for k in d if "iOS-" in k and any(e in x["name"] for x in d[k] for e in [__import__("os").environ["ESCOLHA"]])], key=v); c=[x for x in d[ks[-1]] if __import__("os").environ["ESCOLHA"] in x["name"]] if ks else []; print((ks[-1] if sys.argv[1]=="rt" else c[-1][sys.argv[1]]) if c else "")'
-          echo "runtimes: $(xcrun simctl list runtimes | grep -i ios | tr '
-' ';')"
+          echo "runtimes: $(xcrun simctl list runtimes | grep -i ios | paste -sd ';' -)"
           echo "iOS do teste: $(python3 -c "$ESCOLHER" rt)"
           ID=$(python3 -c "$ESCOLHER" udid)
           NOME=$(python3 -c "$ESCOLHER" name)
