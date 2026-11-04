@@ -77,7 +77,19 @@ define_class!(
             //
             // E aqui e cedo demais pra tocar: a tela ainda nao existe. Guarda,
             // e quem toca e o sceneDidBecomeActive, logo abaixo.
-            for atividade in unsafe { connection_options.userActivities() }.iter() {
+            //
+            // AS DUAS LISTAS PODEM VIR NULAS (build 52, 03/11).
+            //
+            // O iOS 27 devolve nil, e nao uma lista vazia, quando o aplicativo
+            // abre sem link. O objc2 declara as duas como nunca nulas e aborta
+            // ao receber nil — o app morria 0,3s depois de tocar no icone, em
+            // toda abertura normal. Pedidas assim, nil vira lista nenhuma.
+            let atividades: Option<Retained<NSSet<NSUserActivity>>> =
+                unsafe { msg_send![connection_options, userActivities] };
+            let contextos: Option<Retained<NSSet<UIOpenURLContext>>> =
+                unsafe { msg_send![connection_options, URLContexts] };
+
+            for atividade in atividades.iter().flat_map(|a| a.iter()) {
                 if let Some(endereco) = endereco_do_site(&atividade) {
                     tracing::info!("link do site guardado pra quando a tela existir");
                     *self.ivars().link_esperando.borrow_mut() = Some(endereco);
@@ -95,7 +107,7 @@ define_class!(
             // Arquivo .swf aberto de fora tambem chega aqui; o tocar_endereco
             // ignora o que nao e da internet.
             if self.ivars().link_esperando.borrow().is_none() {
-                for contexto in connection_options.URLContexts().iter() {
+                for contexto in contextos.iter().flat_map(|c| c.iter()) {
                     if let Some(texto) = contexto.URL().absoluteString() {
                         tracing::info!("link de esquema guardado pra quando a tela existir");
                         *self.ivars().link_esperando.borrow_mut() = Some(texto.to_string());
