@@ -1,0 +1,41 @@
+# Projetinho de teste, montado na hora pelo xcodegen. Nao e o aplicativo: ele
+# so existe pra rodar o PontaAPonta.swift, que mexe no Safari e no CF Client
+# como um dedo. O "Anfitriao" e um aplicativo vazio que o Xcode exige pra
+# hospedar um teste de interface.
+name: PontaAPonta
+options:
+  bundleIdPrefix: teste.pontaaponta
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    DEVELOPMENT_TEAM: ""
+    SWIFT_VERSION: "5.0"
+    GENERATE_INFOPLIST_FILE: YES
+targets:
+  Anfitriao:
+    type: application
+    platform: iOS
+    sources: [Anfitriao]
+    settings:
+      base:
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  Testes:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Testes]
+    dependencies:
+      - target: Anfitriao
+    settings:
+      base:
+        TEST_TARGET_NAME: Anfitriao
+schemes:
+  Testes:
+    build:
+      targets:
+        Anfitriao: all
+        Testes: [test]
+    test:
+      targets: [Testes]
