@@ -135,6 +135,11 @@ pub struct Ivars {
     /// um toque. Os ajustes sao raros e ficam a dois.
     modo_olho: Cell<u8>,
 
+    /// Veio pelo botao do site (o jogo)? Lido UMA vez, na criacao: a marca
+    /// do scene_delegate se apaga ao ser lida. Decide os controles e se a
+    /// tela fica presa deitada.
+    do_site: Cell<bool>,
+
     /// O som esta cortado? Guardado entre partidas.
     mudo: Cell<bool>,
 
@@ -340,9 +345,21 @@ define_class!(
         //
         // Isto sozinho pode nao bastar: o Info.plist tem a palavra final sobre
         // o que o aplicativo inteiro aceita. Os dois precisam concordar.
+        //
+        // MAS SO O JOGO (16/11). No iPad, travar deitado um arquivo aberto pela
+        // lista fazia o iPadOS, segurado em pe, mostrar o tocador numa
+        // JANELINHA flutuando sobre a tela inicial — foi o que as fotos do
+        // teste do Exemplo mostraram, e e o caminho do revisor da Apple. Fora
+        // do jogo nao ha botoes de jogo pra amontoar (ver modo_olho), entao no
+        // iPad a tela gira livre e o conteudo ocupa o aparelho inteiro. No
+        // iPhone, e no jogo vindo do site, nada muda.
         #[unsafe(method(supportedInterfaceOrientations))]
         fn supportedInterfaceOrientations(&self) -> UIInterfaceOrientationMask {
-            UIInterfaceOrientationMask::Landscape
+            if !self.ivars().do_site.get() && eh_ipad() {
+                UIInterfaceOrientationMask::All
+            } else {
+                UIInterfaceOrientationMask::Landscape
+            }
         }
 
         #[unsafe(method(shouldAutorotate))]
@@ -467,6 +484,9 @@ impl PlayerController {
             controles: RefCell::new(Vec::new()),
             paleta_aberta: Cell::new(false),
             modo_olho: Cell::new(0),
+            // O caminho do botao do site passa SEMPRE por aqui, logo depois
+            // do marcar_origem. Os outros (lista, empty) ficam no padrao: falso.
+            do_site: Cell::new(crate::scene_delegate::veio_pelo_site()),
             mudo: Cell::new(unsafe {
                 NSUserDefaults::standardUserDefaults().boolForKey(&NSString::from_str(CHAVE_MUDO))
             }),
@@ -573,7 +593,7 @@ impl PlayerController {
         let _ = &movie_url;
         self.ivars()
             .modo_olho
-            .set(if crate::scene_delegate::veio_pelo_site() { 0 } else { 1 });
+            .set(if self.ivars().do_site.get() { 0 } else { 1 });
         let navigator = ExternalNavigatorBackend::new(
             player_options
                 .base
@@ -1387,5 +1407,19 @@ impl PlayerController {
             .expect("player initialized")
             .lock()
             .expect("player lock")
+    }
+}
+
+/// iPad? (UIUserInterfaceIdiomPad = 1). Por msg_send pra nao depender de
+/// mais um recurso do objc2-ui-kit.
+fn eh_ipad() -> bool {
+    let aparelho: Option<Retained<AnyObject>> =
+        unsafe { msg_send![objc2::class!(UIDevice), currentDevice] };
+    match aparelho {
+        Some(a) => {
+            let idioma: isize = unsafe { msg_send![&*a, userInterfaceIdiom] };
+            idioma == 1
+        }
+        None => false,
     }
 }

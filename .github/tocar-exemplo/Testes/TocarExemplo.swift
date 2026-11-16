@@ -31,6 +31,17 @@ final class TocarExemplo: XCTestCase {
                           "abertura \(vez): o CF Client fechou \(segundos)s depois do toque no Exemplo")
             }
             passo("abertura \(vez): 30s tocando o Exemplo")
+
+            // Girar nao pode derrubar, e o conteudo tem que ocupar a tela nas
+            // duas posicoes (a build 54 abria numa janelinha em pe no iPad).
+            for (nome, posicao) in [("deitado", UIDeviceOrientation.landscapeLeft),
+                                    ("em pe", UIDeviceOrientation.portrait)] {
+                XCUIDevice.shared.orientation = posicao
+                sleep(5)
+                XCTAssert(app.state == .runningForeground,
+                          "abertura \(vez): o CF Client fechou ao girar \(nome)")
+                passo("abertura \(vez): \(nome)")
+            }
         }
     }
 
