@@ -500,7 +500,9 @@ impl PlayerController {
                 movie: movie.retain(),
             })));
         self.ivars()._scoped_resource.set(if nsurl.isFileURL() {
-            Some(SecurityScopedResource::access(&nsurl).expect("failed accessing NSURL"))
+            // O iOS responde "nao" para arquivo que o proprio app gravou (o
+            // Exemplo.swf). Nao e erro: segue sem a permissao, que nem precisa.
+            SecurityScopedResource::access(&nsurl)
         } else {
             None
         });
