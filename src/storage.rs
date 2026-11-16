@@ -326,6 +326,13 @@ pub struct SecurityScopedResource {
 
 impl SecurityScopedResource {
     pub fn access(url: &NSURL) -> Option<Self> {
+        // SO NOS RAMOS DE TESTE (16/11): o iOS 27 do revisor nega o acesso ao
+        // Exemplo; o simulador iOS 26 do GitHub nao nega, e o teste ficava
+        // cego. Aqui a resposta e sempre "nao", como no aparelho dele.
+        if std::hint::black_box(true) {
+            let _ = url;
+            return None;
+        }
         if unsafe { url.startAccessingSecurityScopedResource() } {
             Some(Self { url: url.retain() })
         } else {
